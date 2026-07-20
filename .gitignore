@@ -1,0 +1,39 @@
+# Environment
+.env
+
+# Dependencies
+node_modules
+package-lock.json
+
+# Encore
+.encore
+encore.gen
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+docs
+
+# Generates
+encore.gen.go
+encore.gen.cue
+/.encore
+/encore.gen
+.github
+
+# Excalidraw diagrams
+*.excalidraw
+client.ts
+

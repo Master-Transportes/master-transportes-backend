@@ -1,0 +1,63 @@
+name: master-transporte
+
+services:
+
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: mt_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - master-transporte-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docker"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: mt_redis
+    restart: unless-stopped
+
+    command: >
+      redis-server
+      --appendonly yes
+      --protected-mode no
+      --maxmemory 512mb
+      --maxmemory-policy volatile-lru
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    networks:
+      - master-transporte-network
+
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+networks:
+  master-transporte-network:
+    name: master-transporte-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

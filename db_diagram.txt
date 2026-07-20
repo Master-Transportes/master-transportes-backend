@@ -1,0 +1,312 @@
+// [DB Diagram](https://dbdiagram.io/)
+
+Enum Role {
+  DRIVER
+  CLIENT
+  ADMIN
+  EMPLOYEE
+}
+
+Enum UserStatus {
+  ACTIVE
+  BANNED
+  INACTIVE
+}
+
+Enum DriverStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+Enum RideStatus {
+  DRIVER_ASSIGNED
+  DRIVER_ARRIVING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+Table User {
+
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  fullName varchar(120) [not null]
+
+  email varchar(255) [not null, unique]
+
+  password varchar [not null]
+
+  role Role [not null, default: 'CLIENT']
+
+  status UserStatus [not null, default: 'ACTIVE']
+
+  banReason varchar(255)
+
+  createdAt timestamp [not null, default: `now()`]
+
+  updatedAt timestamp [not null, default: `now()`]
+
+  indexes {
+
+    role [name: "User_role_idx"]
+
+    createdAt [name: "User_createdAt_idx"]
+
+  }
+
+}
+
+Table Driver {
+
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  userId uuid [not null, unique]
+
+  cnh varchar(20)
+
+  cnhCategory varchar(5)
+
+  status DriverStatus [
+    not null,
+    default: 'PENDING'
+  ]
+
+  rejectionReason varchar(255)
+
+  approvedAt timestamp
+
+  createdAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  updatedAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  indexes {
+
+    userId [name: "Driver_userId_idx"]
+
+    status [name: "Driver_status_idx"]
+
+  }
+
+}
+
+Table Vehicle {
+
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  driverId uuid [not null]
+
+  brand varchar(50) [not null]
+
+  model varchar(80) [not null]
+
+  year int [not null]
+
+  color varchar(30) [not null]
+
+  plate varchar(10) [not null, unique]
+
+  createdAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  updatedAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  indexes {
+
+    driverId [name: "Vehicle_driverId_idx"]
+
+    plate [name: "Vehicle_plate_idx"]
+
+  }
+
+}
+
+Table Ride {
+
+  id uuid [pk, default: `gen_random_uuid()`]
+
+  clientId uuid [not null]
+
+  driverId uuid [not null]
+
+  status RideStatus [
+    not null,
+    default: 'DRIVER_ASSIGNED'
+  ]
+
+  startedAt timestamp
+
+  completedAt timestamp
+
+  cancelledAt timestamp
+
+  createdAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  updatedAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  indexes {
+
+    clientId [
+      name: "Ride_clientId_idx"
+    ]
+
+    driverId [
+      name: "Ride_driverId_idx"
+    ]
+
+    status [
+      name: "Ride_status_idx"
+    ]
+
+    createdAt [
+      name: "Ride_createdAt_idx"
+    ]
+
+    clientId [
+      name: "Ride_client_active_idx"
+    ]
+
+    driverId [
+      name: "Ride_driver_active_idx"
+    ]
+
+  }
+
+}
+
+Table RideLocation {
+
+  rideId uuid [pk]
+
+  originName varchar(200) [not null]
+
+  originLat double [not null]
+
+  originLng double [not null]
+
+  originH3 varchar(20) [not null]
+
+  destinationName varchar(200) [not null]
+
+  destinationLat double [not null]
+
+  destinationLng double [not null]
+
+  destinationH3 varchar(20) [not null]
+
+  regionId varchar(30) [
+    not null,
+    default: 'am-interior'
+  ]
+
+  municipalityId varchar(20) [
+    not null,
+    default: 'unknown'
+  ]
+
+  createdAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  updatedAt timestamp [
+    not null,
+    default: `now()`
+  ]
+
+  indexes {
+
+    regionId [
+      name: "RideLocation_regionId_idx"
+    ]
+
+    municipalityId [
+      name: "RideLocation_municipalityId_idx"
+    ]
+
+  }
+
+}
+
+Table Area {
+
+  id uuid [
+    pk,
+    default: `gen_random_uuid()`
+  ]
+
+  municipality varchar [
+    not null
+  ]
+
+  abbrevState varchar [
+    not null
+  ]
+
+  geometry geometry
+
+  cdMun varchar [
+    not null
+  ]
+
+  cdUf varchar [
+    not null
+  ]
+
+  nmUf varchar [
+    not null
+  ]
+
+  cdRegia varchar [
+    not null
+  ]
+
+  nmRegia varchar [
+    not null
+  ]
+
+  indexes {
+
+    municipality [
+      name: "Area_municipality_idx"
+    ]
+
+    abbrevState [
+      name: "Area_abbrevState_idx"
+    ]
+
+    geometry [
+      name: "Area_geometry_idx"
+    ]
+
+  }
+
+}
+
+Ref: User.id - Driver.userId
+
+Ref: Driver.id < Vehicle.driverId
+
+Ref: User.id < Ride.clientId
+
+Ref: User.id < Ride.driverId
+
+Ref: Ride.id - RideLocation.rideId
