@@ -73,7 +73,6 @@ export class DriverService {
 
   async getRides(userID: string): Promise<{ rides: RideDetailedRow[] }> {
     const result = await this.rideRepo.findByDriverId(userID);
-
     return { rides: result };
   }
 
@@ -91,10 +90,7 @@ export class DriverService {
         throw APIError.notFound("Usuário não encontrado.");
       }
 
-      await Promise.all([
-        this.cache.del(CACHE_KEYS.USER(userID)),
-        this.cache.del(CACHE_KEYS.USER_BASE(userID)),
-      ]);
+      await Promise.all([this.cache.del(CACHE_KEYS.USER(userID)), this.cache.del(CACHE_KEYS.USER_BASE(userID))]);
 
       return {
         id: user.id,
@@ -128,10 +124,7 @@ export class DriverService {
     const hashedPassword = await hash(validated.newPassword, 10);
     await this.userRepo.updatePassword(userID, hashedPassword);
 
-    await Promise.all([
-      this.cache.del(CACHE_KEYS.USER(userID)),
-      this.cache.del(CACHE_KEYS.USER_BASE(userID)),
-    ]);
+    await Promise.all([this.cache.del(CACHE_KEYS.USER(userID)), this.cache.del(CACHE_KEYS.USER_BASE(userID))]);
   }
 }
 

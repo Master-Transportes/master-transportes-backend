@@ -26,23 +26,18 @@ services:
     image: redis:7.2-alpine
     container_name: mt_redis
     restart: unless-stopped
-
     command: >
       redis-server
       --appendonly yes
       --protected-mode no
       --maxmemory 512mb
       --maxmemory-policy volatile-lru
-
     ports:
       - "6379:6379"
-
     volumes:
       - redis_data:/data
-
     networks:
       - master-transporte-network
-
     healthcheck:
       test:
         - CMD
@@ -51,7 +46,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 20s
+
+  rabbitmq:
+    image: rabbitmq:4.3.2-management
+    container_name: mt_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin}
+    ports:
+      - "5672:5672"      # porta AMQP (protocolo)
+      - "15672:15672"    # porta da interface web
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - master-transporte-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 networks:
   master-transporte-network:
@@ -61,3 +75,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  rabbitmq_data:
