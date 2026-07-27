@@ -1,3 +1,5 @@
 export interface IDriverLocationCache {
-  updateLocation(driverId: string, latitude: number, longitude: number): Promise<void>;
+  saveLocation(driverId: string, latitude: number, longitude: number): Promise<void>;
+  goOnline(driverId: string): Promise<void>;
+  goOffline(driverId: string): Promise<void>;
 }

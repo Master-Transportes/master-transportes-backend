@@ -12,6 +12,8 @@ import {
   UpdateProfileDTO,
   UserProfileResponse,
 } from "@/dto/user.interface";
+import { logger } from "@/infra/observability/logger";
+import { startConsumer } from "@/infra/rabbitmq/ride-accepted-consumer";
 
 export const register = api<RegisterUserDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/client/register", auth: false },
@@ -57,3 +59,7 @@ export const cancelRide = api<CancelRideParams, void>(
     await userService.cancelRide(userID, rideId);
   },
 );
+
+startConsumer().catch(err => {
+  logger.error("Failed to start ride-accepted consumer", err, { component: "ride-accepted-consumer" });
+});

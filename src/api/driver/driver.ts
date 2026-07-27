@@ -9,7 +9,7 @@ import {
   UpdateProfileDTO,
   UserProfileResponse,
 } from "@/dto/user.interface";
-import { UpdateDriverLocationDTO } from "@/dto/driver.interface";
+import { UpdateDriverLocationDTO, AcceptOfferDTO, ActiveRideResponse } from "@/dto/driver.interface";
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
@@ -45,5 +45,38 @@ export const updateLocation = api<UpdateDriverLocationDTO, void>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     await driverService.updateLocation(userID, payload);
+  },
+);
+
+export const acceptOffer = api<AcceptOfferDTO, void>(
+  { expose: true, method: "POST", path: "/driver/offer/accept", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.acceptOffer(userID, payload);
+  },
+);
+
+export const goOnline = api<void, void>(
+  { expose: true, method: "POST", path: "/driver/go-online", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.goOnline(userID);
+  },
+);
+
+export const goOffline = api<void, void>(
+  { expose: true, method: "POST", path: "/driver/go-offline", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.goOffline(userID);
+  },
+);
+
+export const getActiveRide = api<void, ActiveRideResponse>(
+  { expose: true, method: "GET", path: "/driver/ride/active", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    const ride = await driverService.getActiveRide(userID);
+    return { ride };
   },
 );

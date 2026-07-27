@@ -2,6 +2,7 @@ import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
 import {
+  AcceptOfferSchema,
   ChangeDriverPasswordSchema,
   RegisterDriverSchema,
   UpdateDriverLocationSchema,
@@ -12,13 +13,15 @@ import type { IUserRepository } from "@/contracts/IUserRepository";
 import type { IDriverRepository } from "@/contracts/IDriverRepository";
 import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
 import type { IUserCache } from "@/contracts/IUserCache";
+import type { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
 import { userRepository } from "@/repositories/user.repository";
 import { driverRepository } from "@/repositories/driver.repository";
 import { rideRepository } from "@/repositories/ride.repository";
 import { userCache } from "@/infra/cache/user-cache";
-import { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
 import { driverLocationCache } from "@/infra/cache/driver-location-cache";
 import { UpdateDriverLocationDTO } from "@/dto/driver.interface";
+import type { AcceptOfferDTO } from "@/dto/driver.interface";
+import { publishOfferAccepted } from "@/infra/rabbitmq/ride-publisher";
 
 const DUPLICATE_KEY = "23505";
 
@@ -129,7 +132,30 @@ export class DriverService {
 
   async updateLocation(userID: string, payload: UpdateDriverLocationDTO): Promise<void> {
     const { latitude, longitude } = validateOrThrow(UpdateDriverLocationSchema, payload);
-    await this.driverLocationCache.updateLocation(userID, latitude, longitude);
+    await this.driverLocationCache.saveLocation(userID, latitude, longitude);
+  }
+
+  async goOnline(userID: string): Promise<void> {
+    await this.driverLocationCache.goOnline(userID);
+  }
+
+  async goOffline(userID: string): Promise<void> {
+    await this.driverLocationCache.goOffline(userID);
+  }
+
+  async getActiveRide(driverId: string): Promise<RideDetailedRow | null> {
+    return this.rideRepo.findActiveByDriverId(driverId);
+  }
+
+  async acceptOffer(driverId: string, payload: AcceptOfferDTO): Promise<void> {
+    const { rideId, offerId } = validateOrThrow(AcceptOfferSchema, payload);
+
+    await publishOfferAccepted({
+      rideId,
+      offerId,
+      driverId,
+      timestamp: new Date().toISOString(),
+    });
   }
 }
 

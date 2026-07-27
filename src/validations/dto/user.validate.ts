@@ -21,4 +21,6 @@ export const RequestRideSchema = z.object({
   pickupLng: z.number().min(-180).max(180),
   dropoffLat: z.number().min(-90).max(90),
   dropoffLng: z.number().min(-180).max(180),
+  originName: z.string().min(1),
+  destinationName: z.string().min(1),
 });

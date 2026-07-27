@@ -1,40 +1,63 @@
-import { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
+import type { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
 import { latLngToCell } from "h3-js";
 import { redis } from "./redis-client";
 import { metrics } from "../metrics";
 import { H3_RESOLUTION, MATCHING_KEYS, DRIVER_LOCATION_TTL } from "./keys-cache";
 
 export class RedisDriverLocationCache implements IDriverLocationCache {
-  async updateLocation(driverId: string, latitude: number, longitude: number): Promise<void> {
+  async saveLocation(driverId: string, latitude: number, longitude: number): Promise<void> {
+    const cell = latLngToCell(latitude, longitude, H3_RESOLUTION);
+    const now = Date.now().toString();
+
+    await redis
+      .pipeline()
+      .hset(
+        MATCHING_KEYS.DRIVER(driverId),
+        "lastLat", latitude.toString(),
+        "lastLng", longitude.toString(),
+        "cell", cell,
+        "lastLocationUpdate", now,
+      )
+      .expire(MATCHING_KEYS.DRIVER(driverId), DRIVER_LOCATION_TTL)
+      .exec();
+
+    metrics.incCounter("driver_location_save_total");
+  }
+
+  async goOnline(driverId: string): Promise<void> {
     const startTime = Date.now();
-    const newCell = latLngToCell(latitude, longitude, H3_RESOLUTION);
-    const oldCell = await redis.hget(MATCHING_KEYS.DRIVER(driverId), "cell");
+    const driver = await redis.hgetall(MATCHING_KEYS.DRIVER(driverId));
+    const lat = driver?.lastLat;
+    const lng = driver?.lastLng;
+    const cell = driver?.cell;
+
+    if (!lat || !lng || !cell) return;
+
+    await redis
+      .pipeline()
+      .geoadd(MATCHING_KEYS.DRIVERS_LOCATION, Number(lng), Number(lat), driverId)
+      .sadd(MATCHING_KEYS.DRIVERS_H3(cell), driverId)
+      .hset(MATCHING_KEYS.DRIVER(driverId), "status", "available")
+      .expire(MATCHING_KEYS.DRIVER(driverId), DRIVER_LOCATION_TTL)
+      .exec();
+
+    metrics.incCounter("driver_go_online_total");
+    metrics.observeHistogram("driver_location_operation_duration_ms", Date.now() - startTime);
+  }
+
+  async goOffline(driverId: string): Promise<void> {
+    const startTime = Date.now();
+    const cell = await redis.hget(MATCHING_KEYS.DRIVER(driverId), "cell");
 
     const pipeline = redis.pipeline();
-
-    pipeline.geoadd(MATCHING_KEYS.DRIVERS_LOCATION, longitude, latitude, driverId);
-    pipeline.hset(
-      MATCHING_KEYS.DRIVER(driverId),
-      "cell",
-      newCell,
-      "status",
-      "available",
-      "lastLocationUpdate",
-      Date.now().toString(),
-    );
-    pipeline.expire(MATCHING_KEYS.DRIVER(driverId), DRIVER_LOCATION_TTL);
-
-    if (oldCell && oldCell !== newCell) {
-      pipeline.srem(MATCHING_KEYS.DRIVERS_H3(oldCell), driverId);
+    pipeline.zrem(MATCHING_KEYS.DRIVERS_LOCATION, driverId);
+    if (cell) {
+      pipeline.srem(MATCHING_KEYS.DRIVERS_H3(cell), driverId);
     }
-
-    if (!oldCell || oldCell !== newCell) {
-      pipeline.sadd(MATCHING_KEYS.DRIVERS_H3(newCell), driverId);
-    }
-
+    pipeline.hset(MATCHING_KEYS.DRIVER(driverId), "status", "offline");
     await pipeline.exec();
 
-    metrics.incCounter("driver_location_update_total");
+    metrics.incCounter("driver_go_offline_total");
     metrics.observeHistogram("driver_location_operation_duration_ms", Date.now() - startTime);
   }
 }

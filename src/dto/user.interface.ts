@@ -66,6 +66,8 @@ export interface RequestRideDTO {
   pickupLng: number;
   dropoffLat: number;
   dropoffLng: number;
+  originName: string;
+  destinationName: string;
 }
 
 export interface RequestRideResponse {

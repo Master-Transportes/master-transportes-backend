@@ -1,7 +1,7 @@
 import { and, eq, desc, inArray } from "drizzle-orm";
 import { rides, rideLocations, RideStatus } from "@/infra/db/schema";
 import { db } from "@/infra/db/drizzle";
-import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
+import type { IRideRepository, RideDetailedRow, CreateRideData } from "@/contracts/IRideRepository";
 
 function toRideDetailed(row: {
   id: string;
@@ -96,6 +96,42 @@ export class RideRepository implements IRideRepository {
       )
       .limit(1);
     return !!row;
+  }
+
+  async findActiveByDriverId(driverId: string): Promise<RideDetailedRow | null> {
+    const [row] = await db
+      .select(SELECT_COLUMNS)
+      .from(rides)
+      .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
+      .where(
+        and(eq(rides.driverId, driverId), inArray(rides.status, ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "IN_PROGRESS"])),
+      )
+      .limit(1);
+
+    return row ? toRideDetailed(row) : null;
+  }
+
+  async createRideAndLocation(data: CreateRideData): Promise<void> {
+    await db.insert(rides).values({
+      id: data.id,
+      clientId: data.clientId,
+      driverId: data.driverId,
+      status: data.status,
+    });
+
+    await db.insert(rideLocations).values({
+      rideId: data.id,
+      originName: data.originName,
+      originLat: data.originLat,
+      originLng: data.originLng,
+      originH3: data.originH3,
+      destinationName: data.destinationName,
+      destinationLat: data.destinationLat,
+      destinationLng: data.destinationLng,
+      destinationH3: data.destinationH3,
+      regionId: data.regionId,
+      municipalityId: data.municipalityId,
+    });
   }
 }
 

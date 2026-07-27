@@ -25,6 +25,8 @@ export async function publishRideRequested(message: {
   pickupLng: number;
   dropoffLat: number;
   dropoffLng: number;
+  originName: string;
+  destinationName: string;
   timestamp: string;
 }): Promise<boolean> {
   const ch = await ensureChannel();
@@ -40,4 +42,15 @@ export async function publishRideCancelled(message: {
   const ch = await ensureChannel();
   const data = Buffer.from(JSON.stringify(message));
   return ch.publish(EXCHANGE, "ride.cancelled", data, { persistent: true });
+}
+
+export async function publishOfferAccepted(message: {
+  rideId: string;
+  offerId: string;
+  driverId: string;
+  timestamp: string;
+}): Promise<boolean> {
+  const ch = await ensureChannel();
+  const data = Buffer.from(JSON.stringify(message));
+  return ch.publish(EXCHANGE, "ride.offer.accepted", data, { persistent: true });
 }

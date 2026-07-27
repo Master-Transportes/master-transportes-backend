@@ -149,6 +149,8 @@ export class UserService {
       pickupLng: data.pickupLng,
       dropoffLat: data.dropoffLat,
       dropoffLng: data.dropoffLng,
+      originName: data.originName,
+      destinationName: data.destinationName,
       timestamp: new Date().toISOString(),
     });
     return { rideId };

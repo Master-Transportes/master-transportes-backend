@@ -27,8 +27,27 @@ export interface RideDetailedRow {
   createdAt: Date;
 }
 
+export interface CreateRideData {
+  id: string;
+  clientId: string;
+  driverId: string;
+  status: RideStatus;
+  originName: string;
+  originLat: number;
+  originLng: number;
+  originH3: string;
+  destinationName: string;
+  destinationLat: number;
+  destinationLng: number;
+  destinationH3: string;
+  regionId: string;
+  municipalityId: string;
+}
+
 export interface IRideRepository {
   findByClientId(clientId: string): Promise<RideDetailedRow[]>;
   findByDriverId(driverId: string): Promise<RideDetailedRow[]>;
   findActiveByClientId(clientId: string): Promise<boolean>;
+  findActiveByDriverId(driverId: string): Promise<RideDetailedRow | null>;
+  createRideAndLocation(data: CreateRideData): Promise<void>;
 }
