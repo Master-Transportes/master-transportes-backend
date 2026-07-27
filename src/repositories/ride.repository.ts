@@ -1,5 +1,5 @@
-import { eq, desc } from "drizzle-orm";
-import { rides, rideLocations } from "@/infra/db/schema";
+import { and, eq, desc, inArray } from "drizzle-orm";
+import { rides, rideLocations, RideStatus } from "@/infra/db/schema";
 import { db } from "@/infra/db/drizzle";
 import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
 
@@ -37,7 +37,7 @@ function toRideDetailed(row: {
     },
     regionId: row.regionId,
     municipalityId: row.municipalityId,
-    status: row.status as RideDetailedRow["status"],
+    status: row.status as RideStatus,
     startedAt: row.startedAt,
     completedAt: row.completedAt,
     cancelledAt: row.cancelledAt,
@@ -85,6 +85,17 @@ export class RideRepository implements IRideRepository {
       .orderBy(desc(rides.createdAt));
 
     return rows.map(toRideDetailed);
+  }
+
+  async findActiveByClientId(clientId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: rides.id })
+      .from(rides)
+      .where(
+        and(eq(rides.clientId, clientId), inArray(rides.status, ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "IN_PROGRESS"])),
+      )
+      .limit(1);
+    return !!row;
   }
 }
 

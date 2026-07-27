@@ -30,4 +30,5 @@ export interface RideDetailedRow {
 export interface IRideRepository {
   findByClientId(clientId: string): Promise<RideDetailedRow[]>;
   findByDriverId(driverId: string): Promise<RideDetailedRow[]>;
+  findActiveByClientId(clientId: string): Promise<boolean>;
 }

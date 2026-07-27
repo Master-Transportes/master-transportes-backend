@@ -60,3 +60,18 @@ export interface RegisterAccountResponse {
 export interface RideListResponse {
   rides: RideSummary[];
 }
+
+export interface RequestRideDTO {
+  pickupLat: number;
+  pickupLng: number;
+  dropoffLat: number;
+  dropoffLng: number;
+}
+
+export interface RequestRideResponse {
+  rideId: string;
+}
+
+export interface CancelRideParams {
+  rideId: string;
+}

@@ -1,14 +1,31 @@
 import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
-import { ChangePasswordSchema, RegisterUserSchema, UpdateProfileSchema } from "@/validations/dto/user.validate";
-import type { ChangePasswordDTO, RegisterUserDTO, UpdateProfileDTO, UserProfileResponse, RideSummary } from "@/dto/user.interface";
+import {
+  ChangePasswordSchema,
+  RegisterUserSchema,
+  RequestRideSchema,
+  UpdateProfileSchema,
+} from "@/validations/dto/user.validate";
+import type {
+  ChangePasswordDTO,
+  RegisterUserDTO,
+  UpdateProfileDTO,
+  UserProfileResponse,
+  RideSummary,
+  RequestRideResponse,
+  RequestRideDTO,
+} from "@/dto/user.interface";
 import type { IUserRepository } from "@/contracts/IUserRepository";
 import type { IRideRepository } from "@/contracts/IRideRepository";
 import type { IUserCache } from "@/contracts/IUserCache";
 import { userRepository } from "@/repositories/user.repository";
 import { rideRepository } from "@/repositories/ride.repository";
 import { userCache } from "@/infra/cache/user-cache";
+import { randomUUID } from "crypto";
+import { redis } from "@/infra/cache/redis-client";
+import { CACHE_KEYS } from "@/infra/cache/keys-cache";
+import { publishRideRequested, publishRideCancelled } from "@/infra/rabbitmq/ride-publisher";
 
 const DUPLICATE_KEY = "23505";
 
@@ -108,6 +125,43 @@ export class UserService {
     await this.userRepo.updatePassword(userID, hashedPassword);
 
     await this.userCacheService.invalidate(userID);
+  }
+
+  async requestRide(passengerId: string, payload: RequestRideDTO): Promise<RequestRideResponse> {
+    const active = await this.rideRepo.findActiveByClientId(passengerId);
+    if (active) {
+      throw APIError.failedPrecondition("Você já possui uma corrida em andamento.");
+    }
+
+    const data = validateOrThrow(RequestRideSchema, payload);
+    const rideId = randomUUID();
+
+    const lockKey = CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId);
+    const locked = await redis.set(lockKey, rideId, "EX", 3600, "NX");
+    if (!locked) {
+      throw APIError.failedPrecondition("Você já possui uma solicitação de corrida ativa.");
+    }
+
+    await publishRideRequested({
+      rideId,
+      passengerId,
+      pickupLat: data.pickupLat,
+      pickupLng: data.pickupLng,
+      dropoffLat: data.dropoffLat,
+      dropoffLng: data.dropoffLng,
+      timestamp: new Date().toISOString(),
+    });
+    return { rideId };
+  }
+
+  async cancelRide(passengerId: string, rideId: string): Promise<void> {
+    await publishRideCancelled({
+      rideId,
+      passengerId,
+      timestamp: new Date().toISOString(),
+    });
+
+    await redis.del(CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId));
   }
 }
 

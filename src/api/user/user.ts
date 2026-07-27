@@ -2,14 +2,16 @@ import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { userService } from "@/services/user.service";
 import {
+  CancelRideParams,
   ChangePasswordDTO,
   RegisterAccountResponse,
   RegisterUserDTO,
+  RequestRideDTO,
+  RequestRideResponse,
   RideListResponse,
   UpdateProfileDTO,
   UserProfileResponse,
 } from "@/dto/user.interface";
-import { publishToUser } from "@/infra/rabbitmq/publisher";
 
 export const register = api<RegisterUserDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/client/register", auth: false },
@@ -37,5 +39,21 @@ export const updatePassword = api<ChangePasswordDTO, void>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     await userService.changePassword(userID, payload);
+  },
+);
+
+export const requestRide = api<RequestRideDTO, RequestRideResponse>(
+  { expose: true, method: "POST", path: "/ride/request", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    return userService.requestRide(userID, payload);
+  },
+);
+
+export const cancelRide = api<CancelRideParams, void>(
+  { expose: true, method: "DELETE", path: "/ride/:rideId/cancel", auth: true },
+  async ({ rideId }) => {
+    const { userID } = auth.getAuthData()!;
+    await userService.cancelRide(userID, rideId);
   },
 );
