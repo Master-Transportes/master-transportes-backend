@@ -8,7 +8,8 @@ import {
   RideListResponse,
   UpdateProfileDTO,
   UserProfileResponse,
-} from "@/interfaces/user.interface";
+} from "@/dto/user.interface";
+import { publishToUser } from "@/infra/rabbitmq/publisher";
 
 export const register = api<RegisterUserDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/client/register", auth: false },
@@ -36,5 +37,22 @@ export const updatePassword = api<ChangePasswordDTO, void>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     await userService.changePassword(userID, payload);
+  },
+);
+
+export const updateStatus1 = api<void, void>(
+  { expose: true, method: "GET", path: "/driver/status1", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+
+    await publishToUser(userID, {
+      event: "driver.location.updated",
+      payload: {
+        lat: "latitude",
+        lng: "longitude",
+        heading: "heading",
+        speed: "speed",
+      },
+    });
   },
 );

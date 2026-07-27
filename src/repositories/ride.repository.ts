@@ -1,37 +1,11 @@
 import { eq, desc } from "drizzle-orm";
 import { rides, rideLocations } from "@/infra/db/schema";
-import type { RideStatus } from "@/infra/db/schema";
-import { DrizzleDatabase, drizzleDatabase } from "@/infra/adapters/drizzle-db.adapter";
-
-export interface RideDetailedRow {
-  id: string;
-  originName: string;
-  originLat: number;
-  originLng: number;
-  originH3: string;
-  destinationName: string;
-  destinationLat: number;
-  destinationLng: number;
-  destinationH3: string;
-  regionId: string;
-  municipalityId: string;
-  status: RideStatus;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  cancelledAt: Date | null;
-  createdAt: Date;
-}
-
-export interface IRideRepository {
-  findByClientId(clientId: string): Promise<RideDetailedRow[]>;
-  findByDriverId(driverId: string): Promise<RideDetailedRow[]>;
-}
+import { db } from "@/infra/db/drizzle";
+import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
 
 export class RideRepository implements IRideRepository {
-  constructor(private readonly database: DrizzleDatabase) {}
-
   async findByClientId(clientId: string): Promise<RideDetailedRow[]> {
-    return this.database.db
+    return db
       .select({
         id: rides.id,
         originName: rideLocations.originName,
@@ -57,7 +31,7 @@ export class RideRepository implements IRideRepository {
   }
 
   async findByDriverId(driverId: string): Promise<RideDetailedRow[]> {
-    return this.database.db
+    return db
       .select({
         id: rides.id,
         originName: rideLocations.originName,
@@ -83,4 +57,5 @@ export class RideRepository implements IRideRepository {
   }
 }
 
-export const rideRepository = new RideRepository(drizzleDatabase);
+export const rideRepository = new RideRepository();
+export type { RideDetailedRow };

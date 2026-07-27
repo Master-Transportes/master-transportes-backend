@@ -1,6 +1,4 @@
-import { createRoleMiddleware, RoleCacheDTO } from "./role.middleware";
-
-export interface DriverCacheDTO extends RoleCacheDTO {}
+import { createRoleMiddleware } from "./role.middleware";
 
 export const DriverMiddleware = createRoleMiddleware({
   role: "DRIVER",

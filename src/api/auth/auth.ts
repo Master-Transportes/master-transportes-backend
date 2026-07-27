@@ -1,15 +1,15 @@
 import { api, APIError } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { accessService } from "@/services/access.service";
-import { sessionService } from "@/services/session.service";
-import type { RefreshDTO, RefreshResponse, LogoutResponse } from "@/interfaces/access.interface";
+import { sessionStore } from "@/infra/session/redis-session-store";
+import type { RefreshDTO, RefreshResponse } from "@/dto/access.interface";
 
 export const refresh = api<RefreshDTO, RefreshResponse>(
   { expose: true, method: "POST", path: "/auth/refresh", auth: false },
   async ({ refreshToken, sessionId }) => accessService.refreshSession(sessionId, refreshToken),
 );
 
-export const logout = api<void, LogoutResponse>(
+export const logout = api<void, { message: string }>(
   { expose: true, method: "POST", path: "/auth/logout", auth: true },
   async () => {
     const { sessionID } = auth.getAuthData()!;
@@ -19,7 +19,7 @@ export const logout = api<void, LogoutResponse>(
   },
 );
 
-export const logoutAll = api<void, LogoutResponse>(
+export const logoutAll = api<void, { message: string }>(
   { expose: true, method: "POST", path: "/auth/logout-all", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
@@ -32,7 +32,7 @@ export const listSessions = api<void, { sessions: string[] }>(
   { expose: true, method: "GET", path: "/auth/sessions", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    const sessionIds = await sessionService.getUserSessionIds(userID);
+    const sessionIds = await sessionStore.getUserSessionIds(userID);
     return { sessions: sessionIds };
   },
 );

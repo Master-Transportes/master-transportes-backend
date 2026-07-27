@@ -8,7 +8,7 @@ import {
   RideListResponse,
   UpdateProfileDTO,
   UserProfileResponse,
-} from "@/interfaces/user.interface";
+} from "@/dto/user.interface";
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },

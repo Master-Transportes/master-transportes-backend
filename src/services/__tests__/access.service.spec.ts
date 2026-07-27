@@ -4,20 +4,18 @@ import { hashSync } from "bcrypt";
 import { eq, like } from "drizzle-orm";
 import { accessService } from "@/services/access.service";
 import { userService } from "@/services/user.service";
-import { sessionService } from "@/services/session.service";
+import { sessionStore } from "@/infra/session/redis-session-store";
 import { userRepository } from "@/repositories/user.repository";
 import { rideRepository } from "@/repositories/ride.repository";
 import { AccessService } from "@/services/access.service";
 import { UserService } from "@/services/user.service";
-import { SessionService } from "@/services/session.service";
-import { cache } from "@/infra/cache";
 import { redis } from "@/infra/cache/redis-client";
 import { db } from "@/infra/db/drizzle";
 import { users } from "@/infra/db/schema";
 import { verifyToken } from "@/auth/auth";
 import { CACHE_KEYS } from "@/infra/cache/keys-cache";
-import type { SignInDTO } from "@/interfaces/access.interface";
-import type { RegisterUserDTO } from "@/interfaces/user.interface";
+import type { SignInDTO } from "@/dto/access.interface";
+import type { RegisterUserDTO } from "@/dto/user.interface";
 
 const TEST_PREFIX = `access-test-${Date.now()}`;
 const DEFAULT_PASSWORD = "cl3an+TestP4ss";
@@ -26,8 +24,6 @@ let testUserId: string;
 let testUserEmail: string;
 let testSessionId: string;
 let testRefreshToken: string;
-
-// Singletons imported from @/di
 
 describe("AccessService", () => {
   beforeAll(async () => {
@@ -48,16 +44,16 @@ describe("AccessService", () => {
   afterAll(async () => {
     await Promise.all([
       db.delete(users).where(like(users.email, `${TEST_PREFIX}%`)),
-      cache.del(CACHE_KEYS.USER(testUserId)),
-      cache.del(CACHE_KEYS.USER_BASE(testUserId)),
-      ...(testSessionId ? [cache.del(CACHE_KEYS.SESSION(testSessionId))] : []),
+      redis.del(CACHE_KEYS.USER(testUserId)),
+      redis.del(CACHE_KEYS.USER_BASE(testUserId)),
+      ...(testSessionId ? [redis.del(CACHE_KEYS.SESSION(testSessionId))] : []),
       redis.del(CACHE_KEYS.USER_SESSIONS(testUserId)),
     ]);
   });
 
   beforeEach(async () => {
     if (testUserId) {
-      await Promise.all([cache.del(CACHE_KEYS.USER(testUserId)), cache.del(CACHE_KEYS.USER_BASE(testUserId))]);
+      await Promise.all([redis.del(CACHE_KEYS.USER(testUserId)), redis.del(CACHE_KEYS.USER_BASE(testUserId))]);
     }
   });
 
@@ -292,12 +288,12 @@ describe("AccessService", () => {
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      const countBefore = await sessionService.count(testUserId);
+      const countBefore = await sessionStore.count(testUserId);
       expect(countBefore).toBeGreaterThanOrEqual(2);
 
       await accessService.logoutAll(testUserId);
 
-      const countAfter = await sessionService.count(testUserId);
+      const countAfter = await sessionStore.count(testUserId);
       expect(countAfter).toBe(0);
 
       const refreshErr1 = await accessService.refreshSession(session1.sessionId, session1.refreshToken).then(
@@ -439,15 +435,18 @@ describe("AccessService", () => {
     it("caches the profile after first retrieval", async () => {
       await accessService.getMe(testUserId);
 
-      const cached = await cache.get(CACHE_KEYS.USER(testUserId));
-      expect(cached).not.toBeNull();
+      const cachedRaw = await redis.get(CACHE_KEYS.USER(testUserId));
+      expect(cachedRaw).not.toBeNull();
+      const cached = JSON.parse(cachedRaw!);
       expect(cached).toHaveProperty("id", testUserId);
     });
 
     it("populates USER_BASE cache for role middleware", async () => {
       await accessService.getMe(testUserId);
 
-      const cached = await cache.get(CACHE_KEYS.USER_BASE(testUserId));
+      const cachedRaw = await redis.get(CACHE_KEYS.USER_BASE(testUserId));
+      expect(cachedRaw).not.toBeNull();
+      const cached = JSON.parse(cachedRaw!);
       expect(cached).toEqual({
         role: "CLIENT",
         status: "ACTIVE",
@@ -474,8 +473,8 @@ describe("AccessService", () => {
 
     afterAll(async () => {
       if (inactiveUserId) {
-        await cache.del(CACHE_KEYS.USER(inactiveUserId));
-        await cache.del(CACHE_KEYS.USER_BASE(inactiveUserId));
+        await redis.del(CACHE_KEYS.USER(inactiveUserId));
+        await redis.del(CACHE_KEYS.USER_BASE(inactiveUserId));
         await redis.del(CACHE_KEYS.USER_SESSIONS(inactiveUserId));
       }
     });

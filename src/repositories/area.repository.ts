@@ -1,0 +1,22 @@
+import { sql } from "drizzle-orm";
+import { areas } from "@/infra/db/schema";
+import { db } from "@/infra/db/drizzle";
+import type { IAreaRepository, AreaRow } from "@/contracts/IAreaRepository";
+
+export class AreaRepository implements IAreaRepository {
+  async findByCoordinates(lat: number, lng: number): Promise<AreaRow | null> {
+    const [row] = await db
+      .select({
+        cdMun: sql<string>`"cdMun"`,
+        municipality: sql<string>`"municipality"`,
+        abbrevState: sql<string>`"abbrevState"`,
+      })
+      .from(areas)
+      .where(sql`ST_Contains(geometry, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4674))`)
+      .limit(1);
+
+    return row ?? null;
+  }
+}
+
+export const areaRepository = new AreaRepository();

@@ -1,6 +1,4 @@
-import { createRoleMiddleware, RoleCacheDTO } from "./role.middleware";
-
-export interface AdminCacheDTO extends RoleCacheDTO {}
+import { createRoleMiddleware } from "./role.middleware";
 
 export const AdminMiddleware = createRoleMiddleware({
   role: "ADMIN",

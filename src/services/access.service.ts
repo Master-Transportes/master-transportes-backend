@@ -1,21 +1,21 @@
 import { APIError } from "encore.dev/api";
 import { compare } from "bcrypt";
 import { generateToken, JWT_EXPIRES_IN } from "@/auth/auth";
-import { CACHE_KEYS } from "@/infra/cache/keys-cache";
 import { validateOrThrow } from "@/validations/schema-validator";
 import { SignInSchema, RefreshSchema } from "@/validations/dto/access.validate";
-import { SessionService } from "@/services/session.service";
-import type { GetMeResponse, SignInDTO, SignInResponse, RefreshResponse } from "@/interfaces/access.interface";
-import type { IUserRepository } from "@/repositories/user.repository";
-import { sessionService } from "@/services/session.service";
+import type { ISessionStore } from "@/contracts/ISessionStore";
+import type { IUserRepository } from "@/contracts/IUserRepository";
+import type { IUserCache } from "@/contracts/IUserCache";
+import type { GetMeResponse, SignInDTO, SignInResponse, RefreshResponse } from "@/dto/access.interface";
+import { sessionStore } from "@/infra/session/redis-session-store";
 import { userRepository } from "@/repositories/user.repository";
-import { RedisCache, cache } from "@/infra/cache";
+import { userCache } from "@/infra/cache/user-cache";
 
 export class AccessService {
   constructor(
-    private readonly cache: RedisCache,
-    private readonly sessionService: SessionService,
+    private readonly sessionService: ISessionStore,
     private readonly userRepo: IUserRepository,
+    private readonly userCacheService: IUserCache,
   ) {}
 
   async signIn(payload: SignInDTO): Promise<SignInResponse> {
@@ -75,7 +75,7 @@ export class AccessService {
   }
 
   async getMe(userID: string): Promise<GetMeResponse> {
-    const cached = await this.cache.get<GetMeResponse>(CACHE_KEYS.USER(userID));
+    const cached = await this.userCacheService.getProfile<GetMeResponse>(userID);
     if (cached) return cached;
 
     const user = await this.userRepo.findById(userID);
@@ -93,19 +93,12 @@ export class AccessService {
     };
 
     await Promise.all([
-      this.cache.set(CACHE_KEYS.USER(userID), profile, { ttlSeconds: 600 }),
-      this.cache.set(
-        CACHE_KEYS.USER_BASE(userID),
-        {
-          role: user.role,
-          status: user.status,
-        },
-        { ttlSeconds: 600 },
-      ),
+      this.userCacheService.setProfile(userID, profile as unknown as Record<string, unknown>),
+      this.userCacheService.setBase(userID, { role: user.role, status: user.status }),
     ]);
 
     return profile;
   }
 }
 
-export const accessService = new AccessService(cache, sessionService, userRepository);
+export const accessService = new AccessService(sessionStore, userRepository, userCache);

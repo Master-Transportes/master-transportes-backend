@@ -1,6 +1,5 @@
 import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
-import { CACHE_KEYS } from "@/infra/cache/keys-cache";
 import { validateOrThrow } from "@/validations/schema-validator";
 import {
   ChangeDriverPasswordSchema,
@@ -12,23 +11,24 @@ import type {
   RegisterDriverDTO,
   UpdateProfileDTO,
   UserProfileResponse,
-} from "@/interfaces/user.interface";
-import type { IUserRepository } from "@/repositories/user.repository";
-import type { IDriverRepository } from "@/repositories/driver.repository";
-import type { IRideRepository, RideDetailedRow } from "@/repositories/ride.repository";
-import { RedisCache, cache } from "@/infra/cache";
+} from "@/dto/user.interface";
+import type { IUserRepository } from "@/contracts/IUserRepository";
+import type { IDriverRepository } from "@/contracts/IDriverRepository";
+import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
+import type { IUserCache } from "@/contracts/IUserCache";
 import { userRepository } from "@/repositories/user.repository";
 import { driverRepository } from "@/repositories/driver.repository";
 import { rideRepository } from "@/repositories/ride.repository";
+import { userCache } from "@/infra/cache/user-cache";
 
 const DUPLICATE_KEY = "23505";
 
 export class DriverService {
   constructor(
-    private readonly cache: RedisCache,
     private readonly userRepo: IUserRepository,
     private readonly driverRepo: IDriverRepository,
     private readonly rideRepo: IRideRepository,
+    private readonly userCacheService: IUserCache,
   ) {}
 
   async register(payload: RegisterDriverDTO): Promise<{ id: string }> {
@@ -90,7 +90,7 @@ export class DriverService {
         throw APIError.notFound("Usuário não encontrado.");
       }
 
-      await Promise.all([this.cache.del(CACHE_KEYS.USER(userID)), this.cache.del(CACHE_KEYS.USER_BASE(userID))]);
+      await this.userCacheService.invalidate(userID);
 
       return {
         id: user.id,
@@ -124,8 +124,8 @@ export class DriverService {
     const hashedPassword = await hash(validated.newPassword, 10);
     await this.userRepo.updatePassword(userID, hashedPassword);
 
-    await Promise.all([this.cache.del(CACHE_KEYS.USER(userID)), this.cache.del(CACHE_KEYS.USER_BASE(userID))]);
+    await this.userCacheService.invalidate(userID);
   }
 }
 
-export const driverService = new DriverService(cache, userRepository, driverRepository, rideRepository);
+export const driverService = new DriverService(userRepository, driverRepository, rideRepository, userCache);

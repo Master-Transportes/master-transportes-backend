@@ -1,8 +1,8 @@
 import { APIError, middleware } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { eq } from "drizzle-orm";
-import { cache } from "@/infra/cache";
-import { drizzleDatabase } from "@/infra/adapters/drizzle-db.adapter";
+import { redis } from "@/infra/cache/redis-client";
+import { db } from "@/infra/db/drizzle";
 import { CACHE_KEYS } from "@/infra/cache/keys-cache";
 import { users } from "@/infra/db/schema";
 import type { UserStatus } from "@/infra/db/schema";
@@ -24,10 +24,11 @@ export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
   middleware({ target: { auth: true } }, async (req, next) => {
     const { userID } = auth.getAuthData()!;
 
-    let user = await cache.get<RoleCacheDTO>(CACHE_KEYS.USER_BASE(userID));
+    const cached = await redis.get(CACHE_KEYS.USER_BASE(userID));
+    let user: RoleCacheDTO | null = cached ? JSON.parse(cached) : null;
 
     if (!user) {
-      const [dbUser] = await drizzleDatabase.db
+      const [dbUser] = await db
         .select({ id: users.id, role: users.role, status: users.status })
         .from(users)
         .where(eq(users.id, userID));
@@ -37,7 +38,7 @@ export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
       }
 
       user = dbUser;
-      await cache.set(CACHE_KEYS.USER_BASE(userID), user, { ttlSeconds: 600 });
+      await redis.set(CACHE_KEYS.USER_BASE(userID), JSON.stringify(user), "EX", 600);
     }
 
     if (user.role !== options.role) {

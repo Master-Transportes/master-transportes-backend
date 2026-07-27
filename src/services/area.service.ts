@@ -1,9 +1,8 @@
-import { sql } from "drizzle-orm";
-import { areas } from "@/infra/db/schema";
-import { GetRegionPayload, GetRegionResponse, OperationalRegion } from "@/interfaces/area.interface";
+import { GetRegionPayload, GetRegionResponse, OperationalRegion } from "@/dto/area.interface";
 import { GetRegionSchema } from "@/validations/dto/area.validate";
 import { validateOrThrow } from "@/validations/schema-validator";
-import { DrizzleDatabase, drizzleDatabase } from "@/infra/adapters/drizzle-db.adapter";
+import type { IAreaRepository } from "@/contracts/IAreaRepository";
+import { areaRepository } from "@/repositories/area.repository";
 
 function slugify(text: string): string {
   return text
@@ -33,34 +32,25 @@ const DEFAULT_REGION: GetRegionResponse = {
 };
 
 export class AreaService {
-  constructor(private readonly database: DrizzleDatabase) {}
+  constructor(private readonly areaRepo: IAreaRepository) {}
 
   async getRegion(payload: GetRegionPayload): Promise<GetRegionResponse> {
     const validated = validateOrThrow(GetRegionSchema, payload);
-    const rows = await this.database.db
-      .select({
-        cdMun: sql<string>`"cdMun"`,
-        municipality: sql<string>`"municipality"`,
-        abbrevState: sql<string>`"abbrevState"`,
-      })
-      .from(areas)
-      .where(sql`ST_Contains(geometry, ST_SetSRID(ST_MakePoint(${validated.lng}, ${validated.lat}), 4674))`)
-      .limit(1);
+    const row = await this.areaRepo.findByCoordinates(validated.lat, validated.lng);
 
-    if (rows.length === 0) {
+    if (!row) {
       return DEFAULT_REGION;
     }
 
-    const { cdMun, municipality, abbrevState } = rows[0];
     return {
-      areaId: cdMun,
-      municipalityId: cdMun,
-      municipality,
-      abbrevState,
-      regionId: makeRegionId(abbrevState, municipality),
-      operationalRegion: resolveOperationalRegion(cdMun, municipality),
+      areaId: row.cdMun,
+      municipalityId: row.cdMun,
+      municipality: row.municipality,
+      abbrevState: row.abbrevState,
+      regionId: makeRegionId(row.abbrevState, row.municipality),
+      operationalRegion: resolveOperationalRegion(row.cdMun, row.municipality),
     };
   }
 }
 
-export const areaService = new AreaService(drizzleDatabase);
+export const areaService = new AreaService(areaRepository);

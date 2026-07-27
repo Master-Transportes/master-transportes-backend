@@ -1,22 +1,22 @@
 import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
-import { CACHE_KEYS } from "@/infra/cache/keys-cache";
 import { validateOrThrow } from "@/validations/schema-validator";
 import { ChangePasswordSchema, RegisterUserSchema, UpdateProfileSchema } from "@/validations/dto/user.validate";
-import type { ChangePasswordDTO, RegisterUserDTO, UpdateProfileDTO, UserProfileResponse, RideSummary } from "@/interfaces/user.interface";
-import type { IUserRepository } from "@/repositories/user.repository";
-import type { IRideRepository } from "@/repositories/ride.repository";
-import { RedisCache, cache } from "@/infra/cache";
+import type { ChangePasswordDTO, RegisterUserDTO, UpdateProfileDTO, UserProfileResponse, RideSummary } from "@/dto/user.interface";
+import type { IUserRepository } from "@/contracts/IUserRepository";
+import type { IRideRepository } from "@/contracts/IRideRepository";
+import type { IUserCache } from "@/contracts/IUserCache";
 import { userRepository } from "@/repositories/user.repository";
 import { rideRepository } from "@/repositories/ride.repository";
+import { userCache } from "@/infra/cache/user-cache";
 
 const DUPLICATE_KEY = "23505";
 
 export class UserService {
   constructor(
-    private readonly cache: RedisCache,
     private readonly userRepo: IUserRepository,
     private readonly rideRepo: IRideRepository,
+    private readonly userCacheService: IUserCache,
   ) {}
 
   async register(payload: RegisterUserDTO): Promise<{ id: string }> {
@@ -50,7 +50,7 @@ export class UserService {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
-        status: user.status,
+      status: user.status,
     };
   }
 
@@ -73,10 +73,7 @@ export class UserService {
         throw APIError.notFound("Usuário não encontrado.");
       }
 
-      await Promise.all([
-        this.cache.del(CACHE_KEYS.USER(userID)),
-        this.cache.del(CACHE_KEYS.USER_BASE(userID)),
-      ]);
+      await this.userCacheService.invalidate(userID);
 
       return {
         id: user.id,
@@ -110,11 +107,8 @@ export class UserService {
     const hashedPassword = await hash(validated.newPassword, 10);
     await this.userRepo.updatePassword(userID, hashedPassword);
 
-    await Promise.all([
-      this.cache.del(CACHE_KEYS.USER(userID)),
-      this.cache.del(CACHE_KEYS.USER_BASE(userID)),
-    ]);
+    await this.userCacheService.invalidate(userID);
   }
 }
 
-export const userService = new UserService(cache, userRepository, rideRepository);
+export const userService = new UserService(userRepository, rideRepository, userCache);

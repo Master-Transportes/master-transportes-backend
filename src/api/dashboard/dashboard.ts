@@ -7,7 +7,7 @@ import type {
   ListSystemUsersParams,
   PaginatedUsersResponse,
   DashboardActionResponse,
-} from "@/interfaces/dashboard.interface";
+} from "@/dto/dashboard.interface";
 
 export const users = api<ListUsersParams, PaginatedUsersResponse>(
   { expose: true, method: "GET", path: "/dashboard/users", auth: true },
