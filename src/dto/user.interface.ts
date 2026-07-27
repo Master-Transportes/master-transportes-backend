@@ -30,14 +30,22 @@ export interface UserProfileResponse {
   status: UserStatus;
 }
 
+export interface PickupInfo {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+export interface DestinationInfo {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
 export interface RideSummary {
   id: string;
-  originName: string;
-  originLat: number;
-  originLng: number;
-  destinationName: string;
-  destinationLat: number;
-  destinationLng: number;
+  pickup: PickupInfo;
+  destination: DestinationInfo;
   status: string;
   startedAt: Date | null;
   completedAt: Date | null;

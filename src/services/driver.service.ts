@@ -4,14 +4,10 @@ import { validateOrThrow } from "@/validations/schema-validator";
 import {
   ChangeDriverPasswordSchema,
   RegisterDriverSchema,
+  UpdateDriverLocationSchema,
   UpdateDriverProfileSchema,
 } from "@/validations/dto/driver.validate";
-import type {
-  ChangePasswordDTO,
-  RegisterDriverDTO,
-  UpdateProfileDTO,
-  UserProfileResponse,
-} from "@/dto/user.interface";
+import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO, UserProfileResponse } from "@/dto/user.interface";
 import type { IUserRepository } from "@/contracts/IUserRepository";
 import type { IDriverRepository } from "@/contracts/IDriverRepository";
 import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
@@ -20,6 +16,9 @@ import { userRepository } from "@/repositories/user.repository";
 import { driverRepository } from "@/repositories/driver.repository";
 import { rideRepository } from "@/repositories/ride.repository";
 import { userCache } from "@/infra/cache/user-cache";
+import { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
+import { driverLocationCache } from "@/infra/cache/driver-location-cache";
+import { UpdateDriverLocationDTO } from "@/dto/driver.interface";
 
 const DUPLICATE_KEY = "23505";
 
@@ -29,6 +28,7 @@ export class DriverService {
     private readonly driverRepo: IDriverRepository,
     private readonly rideRepo: IRideRepository,
     private readonly userCacheService: IUserCache,
+    private readonly driverLocationCache: IDriverLocationCache,
   ) {}
 
   async register(payload: RegisterDriverDTO): Promise<{ id: string }> {
@@ -126,6 +126,17 @@ export class DriverService {
 
     await this.userCacheService.invalidate(userID);
   }
+
+  async updateLocation(userID: string, payload: UpdateDriverLocationDTO): Promise<void> {
+    const { latitude, longitude } = validateOrThrow(UpdateDriverLocationSchema, payload);
+    await this.driverLocationCache.updateLocation(userID, latitude, longitude);
+  }
 }
 
-export const driverService = new DriverService(userRepository, driverRepository, rideRepository, userCache);
+export const driverService = new DriverService(
+  userRepository,
+  driverRepository,
+  rideRepository,
+  userCache,
+  driverLocationCache,
+);

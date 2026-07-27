@@ -1,15 +1,23 @@
 import type { RideStatus } from "@/infra/db/schema";
 
+export interface PickupLocation {
+  name: string;
+  lat: number;
+  lng: number;
+  h3: string;
+}
+
+export interface DestinationLocation {
+  name: string;
+  lat: number;
+  lng: number;
+  h3: string;
+}
+
 export interface RideDetailedRow {
   id: string;
-  originName: string;
-  originLat: number;
-  originLng: number;
-  originH3: string;
-  destinationName: string;
-  destinationLat: number;
-  destinationLng: number;
-  destinationH3: string;
+  pickup: PickupLocation;
+  destination: DestinationLocation;
   regionId: string;
   municipalityId: string;
   status: RideStatus;

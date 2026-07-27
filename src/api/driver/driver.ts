@@ -9,6 +9,7 @@ import {
   UpdateProfileDTO,
   UserProfileResponse,
 } from "@/dto/user.interface";
+import { UpdateDriverLocationDTO } from "@/dto/driver.interface";
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
@@ -36,5 +37,13 @@ export const updatePassword = api<ChangePasswordDTO, void>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     await driverService.changePassword(userID, payload);
+  },
+);
+
+export const updateLocation = api<UpdateDriverLocationDTO, void>(
+  { expose: true, method: "PUT", path: "/driver/location", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.updateLocation(userID, payload);
   },
 );

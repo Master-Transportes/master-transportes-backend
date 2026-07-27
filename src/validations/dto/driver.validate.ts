@@ -16,3 +16,7 @@ export const ChangeDriverPasswordSchema = z.object({
   newPassword: z.string().min(6, "A nova senha deve ter pelo menos 6 caracteres."),
 });
 
+export const UpdateDriverLocationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+});

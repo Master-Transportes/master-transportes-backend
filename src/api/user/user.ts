@@ -39,20 +39,3 @@ export const updatePassword = api<ChangePasswordDTO, void>(
     await userService.changePassword(userID, payload);
   },
 );
-
-export const updateStatus1 = api<void, void>(
-  { expose: true, method: "GET", path: "/driver/status1", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-
-    await publishToUser(userID, {
-      event: "driver.location.updated",
-      payload: {
-        lat: "latitude",
-        lng: "longitude",
-        heading: "heading",
-        speed: "speed",
-      },
-    });
-  },
-);
