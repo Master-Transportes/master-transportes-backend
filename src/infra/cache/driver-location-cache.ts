@@ -31,7 +31,10 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
     const lng = driver?.lastLng;
     const cell = driver?.cell;
 
-    if (!lat || !lng || !cell) return;
+    if (!lat || !lng || !cell) {
+      console.warn(`[driver-location-cache] goOnline: driver ${driverId} sem localização salva`);
+      return;
+    }
 
     await redis
       .pipeline()

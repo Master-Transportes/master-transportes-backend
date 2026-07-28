@@ -10,7 +10,9 @@ export class RedisUserCache implements IUserCache {
     metrics.incCounter("user_cache_get_total");
     metrics.observeHistogram("user_cache_operation_duration_ms", Date.now() - startTime);
     if (!raw) return null;
-    return JSON.parse(raw) as T;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return parsed as T;
   }
 
   async setProfile(userId: string, profile: Record<string, unknown>): Promise<void> {

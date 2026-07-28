@@ -1,9 +1,11 @@
 import { APIError } from "encore.dev/api";
-import { hash, compare } from "bcrypt";
+import { hash } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
 import {
   AcceptOfferSchema,
+  CancelRideSchema,
   ChangeDriverPasswordSchema,
+  CompleteRideSchema,
   RegisterDriverSchema,
   UpdateDriverLocationSchema,
   UpdateDriverProfileSchema,
@@ -12,26 +14,35 @@ import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO, UserProfil
 import type { IUserRepository } from "@/contracts/IUserRepository";
 import type { IDriverRepository } from "@/contracts/IDriverRepository";
 import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
-import type { IUserCache } from "@/contracts/IUserCache";
 import type { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
+import type { IDriverStatusStore } from "@/contracts/IDriverStatusStore";
+import type { IRideRequestStore } from "@/contracts/IRideRequestStore";
+import type { IRideEventPublisher } from "@/contracts/IRideEventPublisher";
+import type { ProfileService } from "@/services/profile.service";
 import { userRepository } from "@/repositories/user.repository";
 import { driverRepository } from "@/repositories/driver.repository";
 import { rideRepository } from "@/repositories/ride.repository";
-import { userCache } from "@/infra/cache/user-cache";
 import { driverLocationCache } from "@/infra/cache/driver-location-cache";
-import { UpdateDriverLocationDTO } from "@/dto/driver.interface";
-import type { AcceptOfferDTO } from "@/dto/driver.interface";
-import { publishOfferAccepted } from "@/infra/rabbitmq/ride-publisher";
-
-const DUPLICATE_KEY = "23505";
+import { driverStatusStore } from "@/infra/cache/driver-status-store";
+import { rideRequestStore } from "@/infra/cache/ride-request-store";
+import { rideEventPublisher } from "@/infra/rabbitmq/ride-event-publisher";
+import { profileService } from "@/services/profile.service";
+import type { UpdateDriverLocationDTO } from "@/dto/driver.interface";
+import type { AcceptOfferDTO, CompleteRideDTO, CancelRideParams, ActiveRideResponse } from "@/dto/driver.interface";
+import { haversineDistance } from "@/utils/geo";
+import { isPgUniqueViolation } from "@/constants/database";
+import { COMPLETION_RADIUS_METERS } from "@/constants/ride";
 
 export class DriverService {
   constructor(
     private readonly userRepo: IUserRepository,
     private readonly driverRepo: IDriverRepository,
     private readonly rideRepo: IRideRepository,
-    private readonly userCacheService: IUserCache,
     private readonly driverLocationCache: IDriverLocationCache,
+    private readonly driverStatusStore: IDriverStatusStore,
+    private readonly rideRequestStore: IRideRequestStore,
+    private readonly rideEventPublisher: IRideEventPublisher,
+    private readonly profileService_: ProfileService,
   ) {}
 
   async register(payload: RegisterDriverDTO): Promise<{ id: string }> {
@@ -50,8 +61,7 @@ export class DriverService {
 
       return user;
     } catch (error: unknown) {
-      const err = error as { cause?: { code?: string }; code?: string };
-      if (err.cause?.code === DUPLICATE_KEY || err.code === DUPLICATE_KEY) {
+      if (isPgUniqueViolation(error)) {
         throw APIError.invalidArgument("E-mail já está em uso.");
       }
       throw error;
@@ -59,19 +69,7 @@ export class DriverService {
   }
 
   async getProfile(userID: string): Promise<UserProfileResponse> {
-    const user = await this.userRepo.findById(userID);
-
-    if (!user) {
-      throw APIError.notFound("Usuário não encontrado.");
-    }
-
-    return {
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-    };
+    return this.profileService_.getProfile(userID);
   }
 
   async getRides(userID: string): Promise<{ rides: RideDetailedRow[] }> {
@@ -80,54 +78,11 @@ export class DriverService {
   }
 
   async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {
-    const validated = validateOrThrow(UpdateDriverProfileSchema, payload);
-
-    try {
-      const user = await this.userRepo.update(userID, {
-        fullName: validated.fullName,
-        email: validated.email?.toLowerCase(),
-        updatedAt: new Date(),
-      });
-
-      if (!user) {
-        throw APIError.notFound("Usuário não encontrado.");
-      }
-
-      await this.userCacheService.invalidate(userID);
-
-      return {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-      };
-    } catch (error: unknown) {
-      const err = error as { cause?: { code?: string }; code?: string };
-      if (err.cause?.code === DUPLICATE_KEY || err.code === DUPLICATE_KEY) {
-        throw APIError.invalidArgument("E-mail já está em uso.");
-      }
-      throw error;
-    }
+    return this.profileService_.updateProfile(userID, payload, UpdateDriverProfileSchema);
   }
 
   async changePassword(userID: string, payload: ChangePasswordDTO): Promise<void> {
-    const validated = validateOrThrow(ChangeDriverPasswordSchema, payload);
-
-    const user = await this.userRepo.findPasswordById(userID);
-    if (!user) {
-      throw APIError.notFound("Usuário não encontrado.");
-    }
-
-    const currentValid = await compare(validated.currentPassword, user.password);
-    if (!currentValid) {
-      throw APIError.permissionDenied("Senha atual incorreta.");
-    }
-
-    const hashedPassword = await hash(validated.newPassword, 10);
-    await this.userRepo.updatePassword(userID, hashedPassword);
-
-    await this.userCacheService.invalidate(userID);
+    return this.profileService_.changePassword(userID, payload, ChangeDriverPasswordSchema);
   }
 
   async updateLocation(userID: string, payload: UpdateDriverLocationDTO): Promise<void> {
@@ -143,19 +98,71 @@ export class DriverService {
     await this.driverLocationCache.goOffline(userID);
   }
 
-  async getActiveRide(driverId: string): Promise<RideDetailedRow | null> {
-    return this.rideRepo.findActiveByDriverId(driverId);
+  async getActiveRide(driverId: string): Promise<ActiveRideResponse> {
+    const ride = await this.rideRepo.findActiveByDriverId(driverId);
+    return { ride };
   }
 
   async acceptOffer(driverId: string, payload: AcceptOfferDTO): Promise<void> {
     const { rideId, offerId } = validateOrThrow(AcceptOfferSchema, payload);
 
-    await publishOfferAccepted({
+    await this.rideEventPublisher.publishOfferAccepted({
       rideId,
       offerId,
       driverId,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  async cancelRide(driverId: string, payload: CancelRideParams): Promise<void> {
+    const { rideId } = validateOrThrow(CancelRideSchema, payload);
+    const ride = await this.rideRepo.findActiveByIdAndDriver(rideId, driverId);
+    if (!ride) {
+      throw APIError.notFound("Corrida não encontrada ou não está ativa.");
+    }
+
+    await this.rideRepo.updateToCancelled(rideId);
+
+    await Promise.all([
+      this.driverStatusStore.setAvailable(driverId),
+      this.rideRequestStore.release(ride.clientId),
+    ]);
+
+    await this.rideEventPublisher.publishRideCancelled({
+      rideId,
+      passengerId: ride.clientId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  async completeRide(driverId: string, payload: CompleteRideDTO): Promise<ActiveRideResponse> {
+    const { rideId, latitude, longitude } = validateOrThrow(CompleteRideSchema, payload);
+    const ride = await this.rideRepo.findActiveByIdAndDriver(rideId, driverId);
+    if (!ride) {
+      throw APIError.notFound("Corrida não encontrada ou não está ativa.");
+    }
+
+    const distance = haversineDistance(
+      latitude,
+      longitude,
+      ride.destination.lat,
+      ride.destination.lng,
+    );
+
+    if (distance > COMPLETION_RADIUS_METERS) {
+      throw APIError.failedPrecondition(
+        `Você precisa estar a menos de ${COMPLETION_RADIUS_METERS}m do destino para concluir a corrida.`,
+      );
+    }
+
+    const updated = await this.rideRepo.updateToCompleted(rideId);
+
+    await Promise.all([
+      this.driverStatusStore.setAvailable(driverId),
+      this.rideRequestStore.release(ride.clientId),
+    ]);
+
+    return { ride: updated };
   }
 }
 
@@ -163,6 +170,9 @@ export const driverService = new DriverService(
   userRepository,
   driverRepository,
   rideRepository,
-  userCache,
   driverLocationCache,
+  driverStatusStore,
+  rideRequestStore,
+  rideEventPublisher,
+  profileService,
 );

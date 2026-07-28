@@ -1,4 +1,4 @@
-import { verifyToken } from "../../src/auth/auth";
+import { verifyToken } from "@/auth/auth";
 import { Gateway, APIError } from "encore.dev/api";
 import { authHandler } from "encore.dev/auth";
 import { Header } from "encore.dev/api";

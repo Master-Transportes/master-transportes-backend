@@ -1,4 +1,4 @@
-import { describe, beforeAll, afterAll, expect, it } from "bun:test";
+import { describe, beforeAll, afterAll, beforeEach, afterEach, expect, it } from "bun:test";
 import { APIError } from "encore.dev/api";
 import { hashSync } from "bcrypt";
 import { eq, like } from "drizzle-orm";
@@ -15,6 +15,13 @@ let testUserEmail: string;
 const sessionStore = new RedisSessionStore();
 
 describe("RedisSessionStore", () => {
+  let createdSessionIds: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(createdSessionIds.map(id => sessionStore.revoke(id)));
+    createdSessionIds = [];
+  });
+
   beforeAll(async () => {
     testUserEmail = `${TEST_PREFIX}@test.com`;
     const [user] = await db
@@ -42,6 +49,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(result.sessionId);
 
       expect(result).toHaveProperty("sessionId");
       expect(typeof result.sessionId).toBe("string");
@@ -61,6 +69,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(result.sessionId);
 
       const session = await sessionStore.get(result.sessionId);
       expect(session).not.toBeNull();
@@ -79,6 +88,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(result.sessionId);
 
       const sessionIds = await sessionStore.getUserSessionIds(testUserId);
       expect(sessionIds).toContain(result.sessionId);
@@ -96,6 +106,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(sessionId);
 
       const session = await sessionStore.get(sessionId);
       expect(session).not.toBeNull();
@@ -110,6 +121,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(sessionId);
 
       const result = await sessionStore.refresh(sessionId, refreshToken);
 
@@ -128,7 +140,6 @@ describe("RedisSessionStore", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
       expect((error as APIError).message).toBe("Sessão não encontrada ou expirada.");
     });
@@ -138,6 +149,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(sessionId);
 
       let error: unknown;
       try {
@@ -145,7 +157,6 @@ describe("RedisSessionStore", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
       expect((error as APIError).message).toBe("Refresh token inválido.");
     });
@@ -155,6 +166,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(sessionId);
 
       await sessionStore.revoke(sessionId);
 
@@ -164,7 +176,6 @@ describe("RedisSessionStore", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
       expect((error as APIError).message).toBe("Sessão não encontrada ou expirada.");
     });
@@ -176,6 +187,7 @@ describe("RedisSessionStore", () => {
         userId: testUserId,
         role: "CLIENT",
       });
+      createdSessionIds.push(sessionId);
 
       await sessionStore.revoke(sessionId);
 
@@ -190,8 +202,11 @@ describe("RedisSessionStore", () => {
   describe("revokeAll()", () => {
     it("removes all sessions for the user", async () => {
       const s1 = await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      createdSessionIds.push(s1.sessionId);
       const s2 = await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      createdSessionIds.push(s2.sessionId);
       const s3 = await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      createdSessionIds.push(s3.sessionId);
 
       await sessionStore.revokeAll(testUserId);
 
@@ -227,8 +242,10 @@ describe("RedisSessionStore", () => {
     });
 
     it("returns correct count after creating sessions", async () => {
-      await sessionStore.create({ userId: testUserId, role: "CLIENT" });
-      await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      const c1 = await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      createdSessionIds.push(c1.sessionId);
+      const c2 = await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      createdSessionIds.push(c2.sessionId);
 
       const count = await sessionStore.count(testUserId);
       expect(count).toBeGreaterThanOrEqual(2);
@@ -256,7 +273,9 @@ describe("RedisSessionStore", () => {
 
     it("returns all session IDs for the user", async () => {
       const s1 = await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      createdSessionIds.push(s1.sessionId);
       const s2 = await sessionStore.create({ userId: testUserId, role: "CLIENT" });
+      createdSessionIds.push(s2.sessionId);
 
       const ids = await sessionStore.getUserSessionIds(testUserId);
       expect(ids).toContain(s1.sessionId);

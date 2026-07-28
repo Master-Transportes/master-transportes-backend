@@ -1,10 +1,14 @@
 import { and, eq, desc, inArray } from "drizzle-orm";
-import { rides, rideLocations, RideStatus } from "@/infra/db/schema";
+import { rides, rideLocations } from "@/infra/db/schema";
+import type { RideStatus } from "@/infra/db/schema";
 import { db } from "@/infra/db/drizzle";
-import type { IRideRepository, RideDetailedRow, CreateRideData } from "@/contracts/IRideRepository";
+import { ACTIVE_RIDE_STATUSES } from "@/constants/ride";
+import type { IRideRepository, RideDetailedRow, CreateRideData, RideActiveRow } from "@/contracts/IRideRepository";
 
 function toRideDetailed(row: {
   id: string;
+  clientId: string;
+  driverId: string;
   originName: string;
   originLat: number;
   originLng: number;
@@ -23,6 +27,8 @@ function toRideDetailed(row: {
 }): RideDetailedRow {
   return {
     id: row.id,
+    clientId: row.clientId,
+    driverId: row.driverId,
     pickup: {
       name: row.originName,
       lat: row.originLat,
@@ -47,6 +53,8 @@ function toRideDetailed(row: {
 
 const SELECT_COLUMNS = {
   id: rides.id,
+  clientId: rides.clientId,
+  driverId: rides.driverId,
   originName: rideLocations.originName,
   originLat: rideLocations.originLat,
   originLng: rideLocations.originLng,
@@ -65,6 +73,17 @@ const SELECT_COLUMNS = {
 } as const;
 
 export class RideRepository implements IRideRepository {
+  async findById(rideId: string): Promise<RideDetailedRow | null> {
+    const [row] = await db
+      .select(SELECT_COLUMNS)
+      .from(rides)
+      .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
+      .where(eq(rides.id, rideId))
+      .limit(1);
+
+    return row ? toRideDetailed(row) : null;
+  }
+
   async findByClientId(clientId: string): Promise<RideDetailedRow[]> {
     const rows = await db
       .select(SELECT_COLUMNS)
@@ -92,7 +111,7 @@ export class RideRepository implements IRideRepository {
       .select({ id: rides.id })
       .from(rides)
       .where(
-        and(eq(rides.clientId, clientId), inArray(rides.status, ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "IN_PROGRESS"])),
+        and(eq(rides.clientId, clientId), inArray(rides.status, ACTIVE_RIDE_STATUSES)),
       )
       .limit(1);
     return !!row;
@@ -104,33 +123,86 @@ export class RideRepository implements IRideRepository {
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
       .where(
-        and(eq(rides.driverId, driverId), inArray(rides.status, ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "IN_PROGRESS"])),
+        and(eq(rides.driverId, driverId), inArray(rides.status, ACTIVE_RIDE_STATUSES)),
       )
       .limit(1);
 
     return row ? toRideDetailed(row) : null;
   }
 
-  async createRideAndLocation(data: CreateRideData): Promise<void> {
-    await db.insert(rides).values({
-      id: data.id,
-      clientId: data.clientId,
-      driverId: data.driverId,
-      status: data.status,
-    });
+  async findActiveByIdAndClient(rideId: string, clientId: string): Promise<RideActiveRow | null> {
+    const [row] = await db
+      .select({ id: rides.id, clientId: rides.clientId, driverId: rides.driverId, status: rides.status })
+      .from(rides)
+      .where(
+        and(
+          eq(rides.id, rideId),
+          eq(rides.clientId, clientId),
+          inArray(rides.status, ACTIVE_RIDE_STATUSES),
+        ),
+      )
+      .limit(1);
 
-    await db.insert(rideLocations).values({
-      rideId: data.id,
-      originName: data.originName,
-      originLat: data.originLat,
-      originLng: data.originLng,
-      originH3: data.originH3,
-      destinationName: data.destinationName,
-      destinationLat: data.destinationLat,
-      destinationLng: data.destinationLng,
-      destinationH3: data.destinationH3,
-      regionId: data.regionId,
-      municipalityId: data.municipalityId,
+    return row ?? null;
+  }
+
+  async findActiveByIdAndDriver(rideId: string, driverId: string): Promise<RideDetailedRow | null> {
+    const [row] = await db
+      .select(SELECT_COLUMNS)
+      .from(rides)
+      .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
+      .where(
+        and(
+          eq(rides.id, rideId),
+          eq(rides.driverId, driverId),
+          inArray(rides.status, ACTIVE_RIDE_STATUSES),
+        ),
+      )
+      .limit(1);
+
+    return row ? toRideDetailed(row) : null;
+  }
+
+  async updateToCompleted(rideId: string): Promise<RideDetailedRow> {
+    const [row] = await db
+      .update(rides)
+      .set({ status: "COMPLETED" as RideStatus, completedAt: new Date() })
+      .where(eq(rides.id, rideId))
+      .returning();
+
+    const detailed = await this.findById(rideId);
+    return detailed!;
+  }
+
+  async updateToCancelled(rideId: string): Promise<void> {
+    await db
+      .update(rides)
+      .set({ status: "CANCELLED" as RideStatus, cancelledAt: new Date() })
+      .where(eq(rides.id, rideId));
+  }
+
+  async createRideAndLocation(data: CreateRideData): Promise<void> {
+    await db.transaction(async (tx) => {
+      await tx.insert(rides).values({
+        id: data.id,
+        clientId: data.clientId,
+        driverId: data.driverId,
+        status: data.status,
+      });
+
+      await tx.insert(rideLocations).values({
+        rideId: data.id,
+        originName: data.originName,
+        originLat: data.originLat,
+        originLng: data.originLng,
+        originH3: data.originH3,
+        destinationName: data.destinationName,
+        destinationLat: data.destinationLat,
+        destinationLng: data.destinationLng,
+        destinationH3: data.destinationH3,
+        regionId: data.regionId,
+        municipalityId: data.municipalityId,
+      });
     });
   }
 }

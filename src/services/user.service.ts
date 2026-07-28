@@ -1,13 +1,15 @@
 import { APIError } from "encore.dev/api";
-import { hash, compare } from "bcrypt";
+import { hash } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
 import {
+  CancelRideSchema,
   ChangePasswordSchema,
   RegisterUserSchema,
   RequestRideSchema,
   UpdateProfileSchema,
 } from "@/validations/dto/user.validate";
 import type {
+  CancelRideParams,
   ChangePasswordDTO,
   RegisterUserDTO,
   UpdateProfileDTO,
@@ -18,22 +20,27 @@ import type {
 } from "@/dto/user.interface";
 import type { IUserRepository } from "@/contracts/IUserRepository";
 import type { IRideRepository } from "@/contracts/IRideRepository";
-import type { IUserCache } from "@/contracts/IUserCache";
+import type { IRideRequestStore } from "@/contracts/IRideRequestStore";
+import type { IDriverStatusStore } from "@/contracts/IDriverStatusStore";
+import type { IRideEventPublisher } from "@/contracts/IRideEventPublisher";
+import type { ProfileService } from "@/services/profile.service";
 import { userRepository } from "@/repositories/user.repository";
 import { rideRepository } from "@/repositories/ride.repository";
-import { userCache } from "@/infra/cache/user-cache";
+import { rideRequestStore } from "@/infra/cache/ride-request-store";
+import { driverStatusStore } from "@/infra/cache/driver-status-store";
+import { rideEventPublisher } from "@/infra/rabbitmq/ride-event-publisher";
+import { profileService } from "@/services/profile.service";
 import { randomUUID } from "crypto";
-import { redis } from "@/infra/cache/redis-client";
-import { CACHE_KEYS } from "@/infra/cache/keys-cache";
-import { publishRideRequested, publishRideCancelled } from "@/infra/rabbitmq/ride-publisher";
-
-const DUPLICATE_KEY = "23505";
+import { isPgUniqueViolation } from "@/constants/database";
 
 export class UserService {
   constructor(
     private readonly userRepo: IUserRepository,
     private readonly rideRepo: IRideRepository,
-    private readonly userCacheService: IUserCache,
+    private readonly rideRequestStore: IRideRequestStore,
+    private readonly driverStatusStore: IDriverStatusStore,
+    private readonly rideEventPublisher: IRideEventPublisher,
+    private readonly profileService_: ProfileService,
   ) {}
 
   async register(payload: RegisterUserDTO): Promise<{ id: string }> {
@@ -48,9 +55,7 @@ export class UserService {
         role: "CLIENT",
       });
     } catch (error: unknown) {
-      const err = error as { cause?: { code?: string }; code?: string };
-      const pgCode = err.cause?.code ?? err.code;
-      if (pgCode === DUPLICATE_KEY) {
+      if (isPgUniqueViolation(error)) {
         throw APIError.invalidArgument("E-mail já está em uso.");
       }
       throw error;
@@ -58,17 +63,7 @@ export class UserService {
   }
 
   async getProfile(userID: string): Promise<UserProfileResponse> {
-    const user = await this.userRepo.findById(userID);
-    if (!user) {
-      throw APIError.notFound("Usuário não encontrado.");
-    }
-    return {
-      id: user.id,
-      fullName: user.fullName,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-    };
+    return this.profileService_.getProfile(userID);
   }
 
   async getRides(userID: string): Promise<{ rides: RideSummary[] }> {
@@ -77,54 +72,11 @@ export class UserService {
   }
 
   async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {
-    const validated = validateOrThrow(UpdateProfileSchema, payload);
-
-    try {
-      const user = await this.userRepo.update(userID, {
-        fullName: validated.fullName,
-        email: validated.email?.toLowerCase(),
-        updatedAt: new Date(),
-      });
-
-      if (!user) {
-        throw APIError.notFound("Usuário não encontrado.");
-      }
-
-      await this.userCacheService.invalidate(userID);
-
-      return {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        status: user.status,
-      };
-    } catch (error: unknown) {
-      const err = error as { cause?: { code?: string }; code?: string };
-      if (err.cause?.code === DUPLICATE_KEY || err.code === DUPLICATE_KEY) {
-        throw APIError.invalidArgument("E-mail já está em uso.");
-      }
-      throw error;
-    }
+    return this.profileService_.updateProfile(userID, payload, UpdateProfileSchema);
   }
 
   async changePassword(userID: string, payload: ChangePasswordDTO): Promise<void> {
-    const validated = validateOrThrow(ChangePasswordSchema, payload);
-
-    const user = await this.userRepo.findPasswordById(userID);
-    if (!user) {
-      throw APIError.notFound("Usuário não encontrado.");
-    }
-
-    const currentValid = await compare(validated.currentPassword, user.password);
-    if (!currentValid) {
-      throw APIError.permissionDenied("Senha atual incorreta.");
-    }
-
-    const hashedPassword = await hash(validated.newPassword, 10);
-    await this.userRepo.updatePassword(userID, hashedPassword);
-
-    await this.userCacheService.invalidate(userID);
+    return this.profileService_.changePassword(userID, payload, ChangePasswordSchema);
   }
 
   async requestRide(passengerId: string, payload: RequestRideDTO): Promise<RequestRideResponse> {
@@ -136,13 +88,12 @@ export class UserService {
     const data = validateOrThrow(RequestRideSchema, payload);
     const rideId = randomUUID();
 
-    const lockKey = CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId);
-    const locked = await redis.set(lockKey, rideId, "EX", 3600, "NX");
+    const locked = await this.rideRequestStore.lock(passengerId, rideId);
     if (!locked) {
       throw APIError.failedPrecondition("Você já possui uma solicitação de corrida ativa.");
     }
 
-    await publishRideRequested({
+    await this.rideEventPublisher.publishRideRequested({
       rideId,
       passengerId,
       pickupLat: data.pickupLat,
@@ -156,15 +107,34 @@ export class UserService {
     return { rideId };
   }
 
-  async cancelRide(passengerId: string, rideId: string): Promise<void> {
-    await publishRideCancelled({
+  async cancelRide(passengerId: string, payload: CancelRideParams): Promise<void> {
+    const { rideId } = validateOrThrow(CancelRideSchema, payload);
+
+    const ride = await this.rideRepo.findActiveByIdAndClient(rideId, passengerId);
+    if (!ride) {
+      throw APIError.notFound("Corrida não encontrada ou não está ativa.");
+    }
+
+    await this.rideRepo.updateToCancelled(rideId);
+
+    await Promise.all([
+      this.driverStatusStore.setAvailable(ride.driverId),
+      this.rideRequestStore.release(passengerId),
+    ]);
+
+    await this.rideEventPublisher.publishRideCancelled({
       rideId,
       passengerId,
       timestamp: new Date().toISOString(),
     });
-
-    await redis.del(CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId));
   }
 }
 
-export const userService = new UserService(userRepository, rideRepository, userCache);
+export const userService = new UserService(
+  userRepository,
+  rideRepository,
+  rideRequestStore,
+  driverStatusStore,
+  rideEventPublisher,
+  profileService,
+);

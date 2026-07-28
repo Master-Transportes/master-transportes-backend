@@ -1,4 +1,4 @@
-import type { DriverStatus, RideStatus } from "@/infra/db/schema";
+import type { DriverStatus } from "@/interfaces/user-types";
 
 export interface CreateDriverData {
   userId: string;
@@ -18,11 +18,4 @@ export interface DriverRow {
 
 export interface IDriverRepository {
   create(data: CreateDriverData): Promise<DriverRow>;
-  findActiveRideByDriver(driverId: string): Promise<{
-    rideId: string;
-    passengerId: string;
-    status: RideStatus;
-    pickupLat: number;
-    pickupLng: number;
-  } | null>;
 }

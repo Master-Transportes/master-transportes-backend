@@ -42,6 +42,12 @@ async function ensureChannel(): Promise<Channel> {
 async function handleMessage(msg: ConsumeMessage): Promise<void> {
   const event = schema.parse(JSON.parse(msg.content.toString()));
 
+  const existing = await rideRepository.findById(event.rideId);
+  if (existing) {
+    logger.info("Ride already exists, skipping duplicate", { rideId: event.rideId, component: "ride-accepted-consumer" });
+    return;
+  }
+
   const region = await areaService.getRegion({ lat: event.pickupLat, lng: event.pickupLng });
   const originH3 = latLngToCell(event.pickupLat, event.pickupLng, H3_RESOLUTION);
   const destinationH3 = latLngToCell(event.dropoffLat, event.dropoffLng, H3_RESOLUTION);
@@ -78,8 +84,12 @@ export async function startConsumer(): Promise<void> {
       ch.ack(msg);
     } catch (err) {
       logger.error("Failed to process ride.driver.accepted", err, { component: "ride-accepted-consumer" });
-      ch.nack(msg, false, false);
+      ch.nack(msg, false, true);
     }
   });
   logger.info("ride-accepted consumer started", { component: "ride-accepted-consumer" });
 }
+
+startConsumer().catch(err => {
+  logger.error("Failed to start ride-accepted consumer", err, { component: "ride-accepted-consumer" });
+});

@@ -1,8 +1,9 @@
-import { GetRegionPayload, GetRegionResponse, OperationalRegion } from "@/dto/area.interface";
+import { GetRegionPayload, GetRegionResponse } from "@/dto/area.interface";
 import { GetRegionSchema } from "@/validations/dto/area.validate";
 import { validateOrThrow } from "@/validations/schema-validator";
 import type { IAreaRepository } from "@/contracts/IAreaRepository";
 import { areaRepository } from "@/repositories/area.repository";
+import { resolveOperationalRegion } from "@/constants/regions";
 
 function slugify(text: string): string {
   return text
@@ -15,11 +16,6 @@ function slugify(text: string): string {
 
 function makeRegionId(abbrevState: string, municipality: string): string {
   return `${abbrevState.toLowerCase()}-${slugify(municipality)}`;
-}
-
-export function resolveOperationalRegion(municipalityId: string, municipality: string): OperationalRegion {
-  if (municipalityId === "1302603" || municipality === "Manaus") return "am-manaus";
-  return "am-interior";
 }
 
 const DEFAULT_REGION: GetRegionResponse = {

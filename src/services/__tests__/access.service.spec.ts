@@ -1,14 +1,10 @@
 import { describe, beforeAll, afterAll, beforeEach, expect, it } from "bun:test";
 import { APIError } from "encore.dev/api";
 import { hashSync } from "bcrypt";
-import { eq, like } from "drizzle-orm";
+import { like } from "drizzle-orm";
 import { accessService } from "@/services/access.service";
 import { userService } from "@/services/user.service";
 import { sessionStore } from "@/infra/session/redis-session-store";
-import { userRepository } from "@/repositories/user.repository";
-import { rideRepository } from "@/repositories/ride.repository";
-import { AccessService } from "@/services/access.service";
-import { UserService } from "@/services/user.service";
 import { redis } from "@/infra/cache/redis-client";
 import { db } from "@/infra/db/drizzle";
 import { users } from "@/infra/db/schema";
@@ -86,82 +82,49 @@ describe("AccessService", () => {
     });
 
     it("rejects non-existent email", async () => {
-      let error: unknown;
-      try {
-        await accessService.signIn({
+      await expect(
+        accessService.signIn({
           login: `nobody-${TEST_PREFIX}@test.com`,
           password: DEFAULT_PASSWORD,
-        } satisfies SignInDTO);
-      } catch (e) {
-        error = e;
-      }
-
-      expect(error).toBeInstanceOf(APIError);
-      expect((error as APIError).message).toBe("E-mail ou senha inválidos.");
+        } satisfies SignInDTO),
+      ).rejects.toThrow("E-mail ou senha inválidos.");
     });
 
     it("rejects wrong password", async () => {
-      let error: unknown;
-      try {
-        await accessService.signIn({
+      await expect(
+        accessService.signIn({
           login: testUserEmail,
           password: "wrong-p4ssword-here",
-        } satisfies SignInDTO);
-      } catch (e) {
-        error = e;
-      }
-
-      expect(error).toBeInstanceOf(APIError);
-      expect((error as APIError).message).toBe("E-mail ou senha inválidos.");
+        } satisfies SignInDTO),
+      ).rejects.toThrow("E-mail ou senha inválidos.");
     });
 
     it("rejects invalid email format via validation", async () => {
-      let error: unknown;
-      try {
-        await accessService.signIn({
+      await expect(
+        accessService.signIn({
           login: "clearly-not-an-email",
           password: DEFAULT_PASSWORD,
-        } satisfies SignInDTO);
-      } catch (e) {
-        error = e;
-      }
-
-      expect(error).toBeInstanceOf(APIError);
+        } satisfies SignInDTO),
+      ).rejects.toThrow(APIError);
     });
 
     it("rejects short password via validation", async () => {
-      let error: unknown;
-      try {
-        await accessService.signIn({
+      await expect(
+        accessService.signIn({
           login: testUserEmail,
           password: "12345",
-        } satisfies SignInDTO);
-      } catch (e) {
-        error = e;
-      }
-
-      expect(error).toBeInstanceOf(APIError);
+        } satisfies SignInDTO),
+      ).rejects.toThrow(APIError);
     });
 
     it("returns same error message for wrong email or password", async () => {
-      const [emailErr, passwordErr] = await Promise.all([
-        accessService
-          .signIn({ login: `random-${TEST_PREFIX}@test.com`, password: "irrelevant" } satisfies SignInDTO)
-          .then(
-            () => {
-              throw new Error("Expected rejection");
-            },
-            (e: unknown) => e as APIError,
-          ),
-        accessService.signIn({ login: testUserEmail, password: "definitely-wrong" } satisfies SignInDTO).then(
-          () => {
-            throw new Error("Expected rejection");
-          },
-          (e: unknown) => e as APIError,
-        ),
-      ]);
+      await expect(
+        accessService.signIn({ login: `random-${TEST_PREFIX}@test.com`, password: "irrelevant" } satisfies SignInDTO),
+      ).rejects.toThrow("E-mail ou senha inválidos.");
 
-      expect(emailErr.message).toBe(passwordErr.message);
+      await expect(
+        accessService.signIn({ login: testUserEmail, password: "definitely-wrong" } satisfies SignInDTO),
+      ).rejects.toThrow("E-mail ou senha inválidos.");
     });
   });
 
@@ -201,7 +164,6 @@ describe("AccessService", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
       expect((error as APIError).message).toBe("Refresh token inválido.");
     });
@@ -213,7 +175,6 @@ describe("AccessService", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
     });
 
@@ -231,7 +192,6 @@ describe("AccessService", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
     });
   });
@@ -253,7 +213,6 @@ describe("AccessService", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
       expect((error as APIError).message).toBe("Refresh token inválido.");
     });
@@ -274,7 +233,6 @@ describe("AccessService", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
     });
 
@@ -296,21 +254,15 @@ describe("AccessService", () => {
       const countAfter = await sessionStore.count(testUserId);
       expect(countAfter).toBe(0);
 
-      const refreshErr1 = await accessService.refreshSession(session1.sessionId, session1.refreshToken).then(
-        () => {
-          throw new Error("Expected rejection");
-        },
-        (e: unknown) => e as APIError,
-      );
-      expect(refreshErr1).toBeInstanceOf(APIError);
-
-      const refreshErr2 = await accessService.refreshSession(session2.sessionId, session2.refreshToken).then(
-        () => {
-          throw new Error("Expected rejection");
-        },
-        (e: unknown) => e as APIError,
-      );
-      expect(refreshErr2).toBeInstanceOf(APIError);
+      for (const s of [session1, session2]) {
+        let error: unknown;
+        try {
+          await accessService.refreshSession(s.sessionId, s.refreshToken);
+        } catch (e) {
+          error = e;
+        }
+        expect(error).toBeInstanceOf(APIError);
+      }
     });
   });
 
@@ -322,6 +274,7 @@ describe("AccessService", () => {
         fullName: "Registration Flow User",
         email,
         password: DEFAULT_PASSWORD,
+        confirmPassword: DEFAULT_PASSWORD,
       } satisfies RegisterUserDTO);
 
       const login = await accessService.signIn({
@@ -355,6 +308,7 @@ describe("AccessService", () => {
         fullName: "First User",
         email,
         password: DEFAULT_PASSWORD,
+        confirmPassword: DEFAULT_PASSWORD,
       } satisfies RegisterUserDTO);
 
       let error: unknown;
@@ -363,11 +317,11 @@ describe("AccessService", () => {
           fullName: "Second User",
           email,
           password: DEFAULT_PASSWORD,
+          confirmPassword: DEFAULT_PASSWORD,
         } satisfies RegisterUserDTO);
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
       expect((error as APIError).message).toBe("E-mail já está em uso.");
     });
@@ -427,7 +381,6 @@ describe("AccessService", () => {
       } catch (e) {
         error = e;
       }
-
       expect(error).toBeInstanceOf(APIError);
       expect((error as APIError).message).toBe("Usuário não encontrado.");
     });
@@ -493,18 +446,12 @@ describe("AccessService", () => {
 
   describe("non-existent user sign in", () => {
     it("rejects sign in for completely unknown email", async () => {
-      let error: unknown;
-      try {
-        await accessService.signIn({
+      await expect(
+        accessService.signIn({
           login: `nonexistent-${TEST_PREFIX}@test.com`,
           password: DEFAULT_PASSWORD,
-        });
-      } catch (e) {
-        error = e;
-      }
-
-      expect(error).toBeInstanceOf(APIError);
-      expect((error as APIError).message).toBe("E-mail ou senha inválidos.");
+        }),
+      ).rejects.toThrow("E-mail ou senha inválidos.");
     });
   });
 });

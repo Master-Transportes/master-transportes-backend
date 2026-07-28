@@ -1,7 +1,7 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { userService } from "@/services/user.service";
-import {
+import type {
   CancelRideParams,
   ChangePasswordDTO,
   RegisterAccountResponse,
@@ -12,9 +12,6 @@ import {
   UpdateProfileDTO,
   UserProfileResponse,
 } from "@/dto/user.interface";
-import { logger } from "@/infra/observability/logger";
-import { startConsumer } from "@/infra/rabbitmq/ride-accepted-consumer";
-
 export const register = api<RegisterUserDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/client/register", auth: false },
   async payload => userService.register(payload),
@@ -54,12 +51,10 @@ export const requestRide = api<RequestRideDTO, RequestRideResponse>(
 
 export const cancelRide = api<CancelRideParams, void>(
   { expose: true, method: "DELETE", path: "/ride/:rideId/cancel", auth: true },
-  async ({ rideId }) => {
+  async payload => {
     const { userID } = auth.getAuthData()!;
-    await userService.cancelRide(userID, rideId);
+    await userService.cancelRide(userID, payload);
   },
 );
 
-startConsumer().catch(err => {
-  logger.error("Failed to start ride-accepted consumer", err, { component: "ride-accepted-consumer" });
-});
+// Consumer is started explicitly by the Encore app lifecycle, not at module load

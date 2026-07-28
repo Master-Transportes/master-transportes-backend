@@ -1,7 +1,7 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { driverService } from "@/services/driver.service";
-import {
+import type {
   ChangePasswordDTO,
   RegisterAccountResponse,
   RegisterDriverDTO,
@@ -9,7 +9,7 @@ import {
   UpdateProfileDTO,
   UserProfileResponse,
 } from "@/dto/user.interface";
-import { UpdateDriverLocationDTO, AcceptOfferDTO, ActiveRideResponse } from "@/dto/driver.interface";
+import type { UpdateDriverLocationDTO, AcceptOfferDTO, CancelRideParams, CompleteRideDTO, ActiveRideResponse } from "@/dto/driver.interface";
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
@@ -76,7 +76,22 @@ export const getActiveRide = api<void, ActiveRideResponse>(
   { expose: true, method: "GET", path: "/driver/ride/active", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    const ride = await driverService.getActiveRide(userID);
-    return { ride };
+    return driverService.getActiveRide(userID);
+  },
+);
+
+export const cancelRide = api<CancelRideParams, void>(
+  { expose: true, method: "DELETE", path: "/driver/:rideId/cancel", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.cancelRide(userID, payload);
+  },
+);
+
+export const completeRide = api<CompleteRideDTO, ActiveRideResponse>(
+  { expose: true, method: "PUT", path: "/driver/:rideId/complete", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.completeRide(userID, payload);
   },
 );

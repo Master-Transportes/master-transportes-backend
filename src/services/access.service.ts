@@ -67,11 +67,16 @@ export class AccessService {
   }
 
   async logout(sessionId: string): Promise<void> {
+    if (!sessionId) throw APIError.invalidArgument("Nenhuma sessão ativa.");
     await this.sessionService.revoke(sessionId);
   }
 
   async logoutAll(userId: string): Promise<void> {
     await this.sessionService.revokeAll(userId);
+  }
+
+  async getUserSessions(userId: string): Promise<string[]> {
+    return this.sessionService.getUserSessionIds(userId);
   }
 
   async getMe(userID: string): Promise<GetMeResponse> {

@@ -1,15 +1,17 @@
-import type { Role, UserStatus } from "@/infra/db/schema";
+import type { Role, UserStatus } from "@/interfaces/user-types";
 
 export interface RegisterUserDTO {
   fullName: string;
   email: string;
   password: string;
+  confirmPassword: string;
 }
 
 export interface RegisterDriverDTO {
   fullName: string;
   email: string;
   password: string;
+  confirmPassword: string;
 }
 
 export interface UpdateProfileDTO {

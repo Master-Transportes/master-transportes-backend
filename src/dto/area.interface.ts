@@ -1,4 +1,5 @@
-export type OperationalRegion = "am-manaus" | "am-interior";
+import type { OperationalRegion } from "@/constants/regions";
+export type { OperationalRegion };
 
 export const OPERATIONAL_REGIONS: OperationalRegion[] = ["am-manaus", "am-interior"];
 

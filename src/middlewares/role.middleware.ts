@@ -1,11 +1,9 @@
 import { APIError, middleware } from "encore.dev/api";
 import * as auth from "~encore/auth";
-import { eq } from "drizzle-orm";
 import { redis } from "@/infra/cache/redis-client";
-import { db } from "@/infra/db/drizzle";
 import { CACHE_KEYS } from "@/infra/cache/keys-cache";
-import { users } from "@/infra/db/schema";
-import type { UserStatus } from "@/infra/db/schema";
+import { userRepository } from "@/repositories/user.repository";
+import type { UserStatus } from "@/interfaces/user-types";
 
 export interface RoleCacheDTO {
   id: string;
@@ -28,16 +26,13 @@ export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
     let user: RoleCacheDTO | null = cached ? JSON.parse(cached) : null;
 
     if (!user) {
-      const [dbUser] = await db
-        .select({ id: users.id, role: users.role, status: users.status })
-        .from(users)
-        .where(eq(users.id, userID));
+      const dbUser = await userRepository.findById(userID);
 
       if (!dbUser) {
         throw APIError.notFound(options.notFoundMessage);
       }
 
-      user = dbUser;
+      user = { id: dbUser.id, role: dbUser.role, status: dbUser.status };
       await redis.set(CACHE_KEYS.USER_BASE(userID), JSON.stringify(user), "EX", 600);
     }
 

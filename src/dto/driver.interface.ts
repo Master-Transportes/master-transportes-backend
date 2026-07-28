@@ -10,6 +10,16 @@ export interface AcceptOfferDTO {
   offerId: string;
 }
 
+export interface CompleteRideDTO {
+  rideId: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface ActiveRideResponse {
   ride: RideDetailedRow | null;
+}
+
+export interface CancelRideParams {
+  rideId: string;
 }

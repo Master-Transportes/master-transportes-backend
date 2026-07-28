@@ -1,4 +1,4 @@
-import type { RideStatus } from "@/infra/db/schema";
+import type { RideStatus } from "@/interfaces/user-types";
 
 export interface PickupLocation {
   name: string;
@@ -16,6 +16,8 @@ export interface DestinationLocation {
 
 export interface RideDetailedRow {
   id: string;
+  clientId: string;
+  driverId: string;
   pickup: PickupLocation;
   destination: DestinationLocation;
   regionId: string;
@@ -44,10 +46,22 @@ export interface CreateRideData {
   municipalityId: string;
 }
 
+export interface RideActiveRow {
+  id: string;
+  clientId: string;
+  driverId: string;
+  status: RideStatus;
+}
+
 export interface IRideRepository {
+  findById(rideId: string): Promise<RideDetailedRow | null>;
   findByClientId(clientId: string): Promise<RideDetailedRow[]>;
   findByDriverId(driverId: string): Promise<RideDetailedRow[]>;
   findActiveByClientId(clientId: string): Promise<boolean>;
   findActiveByDriverId(driverId: string): Promise<RideDetailedRow | null>;
+  findActiveByIdAndClient(rideId: string, clientId: string): Promise<RideActiveRow | null>;
+  findActiveByIdAndDriver(rideId: string, driverId: string): Promise<RideDetailedRow | null>;
   createRideAndLocation(data: CreateRideData): Promise<void>;
+  updateToCompleted(rideId: string): Promise<RideDetailedRow>;
+  updateToCancelled(rideId: string): Promise<void>;
 }

@@ -1,16 +1,10 @@
-import { APIError } from "encore.dev/api";
 import { eq, desc, inArray, sql, and, or, ilike } from "drizzle-orm";
 import { users } from "@/infra/db/schema";
 import type { Role } from "@/infra/db/schema";
 import type {
-  BanUserParams,
-  ListUsersParams,
-  ListSystemUsersParams,
   PaginatedUsersResponse,
   DashboardActionResponse,
 } from "@/dto/dashboard.interface";
-import { validateOrThrow } from "@/validations/schema-validator";
-import { BanUserSchema, ListUsersSchema, ListSystemUsersSchema } from "@/validations/dto/dashboard.validate";
 import { db } from "@/infra/db/drizzle";
 import type { IUserReadRepository } from "@/contracts/IUserReadRepository";
 
@@ -27,70 +21,83 @@ const LIST_COLUMNS = {
 
 const SYSTEM_ROLES: Role[] = ["ADMIN", "EMPLOYEE"];
 
+interface ListUsersData {
+  role: "DRIVER" | "CLIENT";
+  page: number;
+  limit: number;
+  search: string;
+  status?: "ACTIVE" | "BANNED" | "INACTIVE";
+}
+
+interface ListSystemUsersData {
+  page: number;
+  limit: number;
+  search: string;
+  status?: "ACTIVE" | "BANNED" | "INACTIVE";
+}
+
 export class UserReadRepository implements IUserReadRepository {
-  async listUsers(params: ListUsersParams): Promise<PaginatedUsersResponse> {
-    const v = validateOrThrow(ListUsersSchema, params);
-    const offset = (v.page - 1) * v.limit;
+  async listUsers(data: ListUsersData): Promise<PaginatedUsersResponse> {
+    const offset = (data.page - 1) * data.limit;
 
     const where = and(
-      eq(users.role, v.role),
-      v.status ? eq(users.status, v.status) : undefined,
-      v.search
+      eq(users.role, data.role),
+      data.status ? eq(users.status, data.status) : undefined,
+      data.search
         ? or(
-            ilike(users.fullName, `%${v.search}%`),
-            ilike(users.email, `%${v.search}%`),
+            ilike(users.fullName, `%${data.search}%`),
+            ilike(users.email, `%${data.search}%`),
           )
         : undefined,
     );
 
-    const [data, countResult] = await Promise.all([
-      db.select(LIST_COLUMNS).from(users).where(where).orderBy(desc(users.createdAt)).limit(v.limit).offset(offset),
+    const [result, countResult] = await Promise.all([
+      db.select(LIST_COLUMNS).from(users).where(where).orderBy(desc(users.createdAt)).limit(data.limit).offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(users).where(where),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
 
     return {
-      users: data,
+      users: result,
       total,
-      page: v.page,
-      limit: v.limit,
-      totalPages: Math.ceil(total / v.limit),
+      page: data.page,
+      limit: data.limit,
+      totalPages: Math.ceil(total / data.limit),
     };
   }
 
-  async listSystemUsers(params: ListSystemUsersParams): Promise<PaginatedUsersResponse> {
-    const v = validateOrThrow(ListSystemUsersSchema, params);
-    const offset = (v.page - 1) * v.limit;
+  async listSystemUsers(data: ListSystemUsersData): Promise<PaginatedUsersResponse> {
+    const offset = (data.page - 1) * data.limit;
 
     const where = and(
       inArray(users.role, SYSTEM_ROLES),
-      v.status ? eq(users.status, v.status) : undefined,
-      v.search
+      data.status ? eq(users.status, data.status) : undefined,
+      data.search
         ? or(
-            ilike(users.fullName, `%${v.search}%`),
-            ilike(users.email, `%${v.search}%`),
+            ilike(users.fullName, `%${data.search}%`),
+            ilike(users.email, `%${data.search}%`),
           )
         : undefined,
     );
 
-    const [data, countResult] = await Promise.all([
-      db.select(LIST_COLUMNS).from(users).where(where).orderBy(desc(users.createdAt)).limit(v.limit).offset(offset),
+    const [result, countResult] = await Promise.all([
+      db.select(LIST_COLUMNS).from(users).where(where).orderBy(desc(users.createdAt)).limit(data.limit).offset(offset),
       db.select({ count: sql<number>`count(*)` }).from(users).where(where),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
 
     return {
-      users: data,
+      users: result,
       total,
-      page: v.page,
-      limit: v.limit,
-      totalPages: Math.ceil(total / v.limit),
+      page: data.page,
+      limit: data.limit,
+      totalPages: Math.ceil(total / data.limit),
     };
   }
 
-  async activateUser(userId: string): Promise<DashboardActionResponse> {
+  async activateUser(userId: string): Promise<DashboardActionResponse | null> {
     const [user] = await db
       .update(users)
       .set({ status: "ACTIVE", banReason: null, updatedAt: new Date() })
@@ -101,31 +108,21 @@ export class UserReadRepository implements IUserReadRepository {
         banReason: users.banReason,
       });
 
-    if (!user) {
-      throw APIError.notFound("Usuário não encontrado.");
-    }
-
-    return user;
+    return user ?? null;
   }
 
-  async banUser(payload: BanUserParams): Promise<DashboardActionResponse> {
-    const validated = validateOrThrow(BanUserSchema, payload);
-
+  async banUser(id: string, reason: string): Promise<DashboardActionResponse | null> {
     const [user] = await db
       .update(users)
-      .set({ status: "BANNED", banReason: validated.reason, updatedAt: new Date() })
-      .where(eq(users.id, payload.id))
+      .set({ status: "BANNED", banReason: reason, updatedAt: new Date() })
+      .where(eq(users.id, id))
       .returning({
         id: users.id,
         status: users.status,
         banReason: users.banReason,
       });
 
-    if (!user) {
-      throw APIError.notFound("Usuário não encontrado.");
-    }
-
-    return user;
+    return user ?? null;
   }
 }
 

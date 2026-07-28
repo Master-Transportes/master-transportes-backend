@@ -1,7 +1,6 @@
-import { api, APIError } from "encore.dev/api";
+import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { accessService } from "@/services/access.service";
-import { sessionStore } from "@/infra/session/redis-session-store";
 import type { RefreshDTO, RefreshResponse } from "@/dto/access.interface";
 
 export const refresh = api<RefreshDTO, RefreshResponse>(
@@ -13,7 +12,6 @@ export const logout = api<void, { message: string }>(
   { expose: true, method: "POST", path: "/auth/logout", auth: true },
   async () => {
     const { sessionID } = auth.getAuthData()!;
-    if (!sessionID) throw APIError.invalidArgument("Nenhuma sessão ativa.");
     await accessService.logout(sessionID);
     return { message: "Logout realizado com sucesso." };
   },
@@ -32,7 +30,7 @@ export const listSessions = api<void, { sessions: string[] }>(
   { expose: true, method: "GET", path: "/auth/sessions", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    const sessionIds = await sessionStore.getUserSessionIds(userID);
-    return { sessions: sessionIds };
+    const sessions = await accessService.getUserSessions(userID);
+    return { sessions };
   },
 );
