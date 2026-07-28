@@ -8,6 +8,9 @@ import {
   timestamp,
   doublePrecision,
   index,
+  uniqueIndex,
+  boolean,
+  date,
   customType,
 } from "drizzle-orm/pg-core";
 
@@ -55,12 +58,8 @@ export const drivers = pgTable(
   "Driver",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("userId")
-      .notNull()
-      .unique()
-      .references(() => users.id),
-    cnh: varchar("cnh", { length: 20 }),
-    cnhCategory: varchar("cnhCategory", { length: 5 }),
+    userId: uuid("userId").unique().references(() => users.id),
+    fullName: varchar("fullName", { length: 120 }).notNull(),
     status: DriverStatus("status").default("PENDING").notNull(),
     rejectionReason: varchar("rejectionReason", { length: 255 }),
     approvedAt: timestamp("approvedAt"),
@@ -71,6 +70,47 @@ export const drivers = pgTable(
     index("Driver_status_idx").on(table.status),
     index("Driver_userId_idx").on(table.userId),
   ],
+);
+
+export const driverLicenses = pgTable(
+  "DriverLicense",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    driverId: uuid("driverId")
+      .notNull()
+      .references(() => drivers.id),
+    cnh: varchar("cnh", { length: 20 }).notNull(),
+    category: varchar("category", { length: 5 }).notNull(),
+    validFrom: date("validFrom").notNull().defaultNow(),
+    validUntil: date("validUntil"),
+    isActive: boolean("isActive").default(false).notNull(),
+    isVerified: boolean("isVerified").default(false),
+    verifiedAt: timestamp("verifiedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    index("DriverLicense_driverId_idx").on(table.driverId),
+    uniqueIndex("DriverLicense_active_unique")
+      .on(table.driverId)
+      .where(sql`"isActive" = true`),
+  ],
+);
+
+export const driverCredentials = pgTable(
+  "DriverCredential",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    driverId: uuid("driverId")
+      .notNull()
+      .unique()
+      .references(() => drivers.id),
+    email: varchar("email", { length: 255 }).notNull().unique(),
+    password: varchar("password").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [index("DriverCredential_email_idx").on(table.email)],
 );
 
 export const vehicles = pgTable(
@@ -85,12 +125,16 @@ export const vehicles = pgTable(
     year: integer("year").notNull(),
     color: varchar("color", { length: 30 }).notNull(),
     plate: varchar("plate", { length: 10 }).notNull().unique(),
+    isActive: boolean("isActive").default(false).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
   table => [
     index("Vehicle_driverId_idx").on(table.driverId),
     index("Vehicle_plate_idx").on(table.plate),
+    uniqueIndex("Vehicle_active_unique")
+      .on(table.driverId)
+      .where(sql`"isActive" = true`),
   ],
 );
 
@@ -103,7 +147,7 @@ export const rides = pgTable(
       .references(() => users.id),
     driverId: uuid("driverId")
       .notNull()
-      .references(() => users.id),
+      .references(() => drivers.id),
     status: RideStatus("status").default("DRIVER_ASSIGNED").notNull(),
     startedAt: timestamp("startedAt"),
     completedAt: timestamp("completedAt"),

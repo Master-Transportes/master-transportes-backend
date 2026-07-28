@@ -4,7 +4,7 @@ export interface CreateUserData {
   fullName: string;
   email: string;
   password: string;
-  role: "CLIENT" | "DRIVER";
+  role: "CLIENT";
 }
 
 export interface UpdateUserData {

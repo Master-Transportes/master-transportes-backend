@@ -7,9 +7,15 @@ import type {
   RegisterDriverDTO,
   RideListResponse,
   UpdateProfileDTO,
-  UserProfileResponse,
 } from "@/dto/user.interface";
-import type { UpdateDriverLocationDTO, AcceptOfferDTO, CancelRideParams, CompleteRideDTO, ActiveRideResponse } from "@/dto/driver.interface";
+import type {
+  UpdateDriverLocationDTO,
+  AcceptOfferDTO,
+  CancelRideParams,
+  CompleteRideDTO,
+  ActiveRideResponse,
+  DriverProfileResponse,
+} from "@/dto/driver.interface";
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
@@ -24,7 +30,7 @@ export const rides = api<void, RideListResponse>(
   },
 );
 
-export const updateProfile = api<UpdateProfileDTO, UserProfileResponse>(
+export const updateProfile = api<UpdateProfileDTO, DriverProfileResponse>(
   { expose: true, method: "PUT", path: "/driver/profile", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;

@@ -28,8 +28,8 @@ export class AccessService {
       throw APIError.unauthenticated("E-mail ou senha inválidos.");
     }
 
-    if (user.status === "BANNED") {
-      throw APIError.permissionDenied("Conta banida. Entre em contato com o suporte.");
+    if (user.role === "DRIVER") {
+      throw APIError.unauthenticated("E-mail ou senha inválidos.");
     }
 
     const validPassword = await compare(password, user.password);

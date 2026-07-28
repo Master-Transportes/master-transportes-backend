@@ -1,4 +1,5 @@
 import type { RideDetailedRow } from "@/contracts/IRideRepository";
+import type { DriverStatus } from "@/interfaces/user-types";
 
 export interface UpdateDriverLocationDTO {
   latitude: number;
@@ -22,4 +23,11 @@ export interface ActiveRideResponse {
 
 export interface CancelRideParams {
   rideId: string;
+}
+
+export interface DriverProfileResponse {
+  id: string;
+  fullName: string;
+  email: string;
+  status: DriverStatus;
 }

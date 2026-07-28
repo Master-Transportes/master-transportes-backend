@@ -1,5 +1,5 @@
 import { APIError } from "encore.dev/api";
-import { hash } from "bcrypt";
+import { hash, compare } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
 import {
   AcceptOfferSchema,
@@ -10,23 +10,22 @@ import {
   UpdateDriverLocationSchema,
   UpdateDriverProfileSchema,
 } from "@/validations/dto/driver.validate";
-import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO, UserProfileResponse } from "@/dto/user.interface";
-import type { IUserRepository } from "@/contracts/IUserRepository";
+import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO } from "@/dto/user.interface";
+import type { IDriverCredentialRepository } from "@/contracts/IDriverCredentialRepository";
 import type { IDriverRepository } from "@/contracts/IDriverRepository";
+import type { DriverProfileResponse } from "@/dto/driver.interface";
 import type { IRideRepository, RideDetailedRow } from "@/contracts/IRideRepository";
 import type { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
 import type { IDriverStatusStore } from "@/contracts/IDriverStatusStore";
 import type { IRideRequestStore } from "@/contracts/IRideRequestStore";
 import type { IRideEventPublisher } from "@/contracts/IRideEventPublisher";
-import type { ProfileService } from "@/services/profile.service";
-import { userRepository } from "@/repositories/user.repository";
 import { driverRepository } from "@/repositories/driver.repository";
+import { driverCredentialRepository } from "@/repositories/driver-credential.repository";
 import { rideRepository } from "@/repositories/ride.repository";
 import { driverLocationCache } from "@/infra/cache/driver-location-cache";
 import { driverStatusStore } from "@/infra/cache/driver-status-store";
 import { rideRequestStore } from "@/infra/cache/ride-request-store";
 import { rideEventPublisher } from "@/infra/rabbitmq/ride-event-publisher";
-import { profileService } from "@/services/profile.service";
 import type { UpdateDriverLocationDTO } from "@/dto/driver.interface";
 import type { AcceptOfferDTO, CompleteRideDTO, CancelRideParams, ActiveRideResponse } from "@/dto/driver.interface";
 import { haversineDistance } from "@/utils/geo";
@@ -35,14 +34,13 @@ import { COMPLETION_RADIUS_METERS } from "@/constants/ride";
 
 export class DriverService {
   constructor(
-    private readonly userRepo: IUserRepository,
+    private readonly credentialRepo: IDriverCredentialRepository,
     private readonly driverRepo: IDriverRepository,
     private readonly rideRepo: IRideRepository,
     private readonly driverLocationCache: IDriverLocationCache,
     private readonly driverStatusStore: IDriverStatusStore,
     private readonly rideRequestStore: IRideRequestStore,
     private readonly rideEventPublisher: IRideEventPublisher,
-    private readonly profileService_: ProfileService,
   ) {}
 
   async register(payload: RegisterDriverDTO): Promise<{ id: string }> {
@@ -50,39 +48,52 @@ export class DriverService {
 
     const hashedPassword = await hash(validated.password, 10);
     try {
-      const user = await this.userRepo.create({
-        fullName: validated.fullName,
+      const driver = await this.driverRepo.create({ fullName: validated.fullName });
+
+      await this.credentialRepo.create({
+        driverId: driver.id,
         email: validated.email.toLowerCase(),
         password: hashedPassword,
-        role: "DRIVER",
       });
 
-      await this.driverRepo.create({ userId: user.id });
-
-      return user;
+      return { id: driver.id };
     } catch (error: unknown) {
       if (isPgUniqueViolation(error)) {
         throw APIError.invalidArgument("E-mail já está em uso.");
       }
-      throw error;
+      throw APIError.internal("Erro ao registrar motorista.");
     }
   }
 
-  async getProfile(userID: string): Promise<UserProfileResponse> {
-    return this.profileService_.getProfile(userID);
+  async getProfile(driverId: string): Promise<DriverProfileResponse> {
+    const profile = await this.driverRepo.findById(driverId);
+    if (!profile) throw APIError.notFound("Motorista não encontrado.");
+    return profile;
   }
 
-  async getRides(userID: string): Promise<{ rides: RideDetailedRow[] }> {
-    const result = await this.rideRepo.findByDriverId(userID);
+  async getRides(driverId: string): Promise<{ rides: RideDetailedRow[] }> {
+    const result = await this.rideRepo.findByDriverId(driverId);
     return { rides: result };
   }
 
-  async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {
-    return this.profileService_.updateProfile(userID, payload, UpdateDriverProfileSchema);
+  async updateProfile(driverId: string, payload: UpdateProfileDTO): Promise<DriverProfileResponse> {
+    const validated = validateOrThrow(UpdateDriverProfileSchema, payload);
+    const updated = await this.driverRepo.updateProfile(driverId, validated);
+    if (!updated) throw APIError.notFound("Motorista não encontrado.");
+    return updated;
   }
 
-  async changePassword(userID: string, payload: ChangePasswordDTO): Promise<void> {
-    return this.profileService_.changePassword(userID, payload, ChangeDriverPasswordSchema);
+  async changePassword(driverId: string, payload: ChangePasswordDTO): Promise<void> {
+    const { currentPassword, newPassword } = validateOrThrow(ChangeDriverPasswordSchema, payload);
+
+    const cred = await this.credentialRepo.findByDriverId(driverId);
+    if (!cred) throw APIError.notFound("Motorista não encontrado.");
+
+    const valid = await compare(currentPassword, cred.password);
+    if (!valid) throw APIError.invalidArgument("Senha atual incorreta.");
+
+    const hashed = await hash(newPassword, 10);
+    await this.driverRepo.updatePassword(driverId, hashed);
   }
 
   async updateLocation(userID: string, payload: UpdateDriverLocationDTO): Promise<void> {
@@ -167,12 +178,11 @@ export class DriverService {
 }
 
 export const driverService = new DriverService(
-  userRepository,
+  driverCredentialRepository,
   driverRepository,
   rideRepository,
   driverLocationCache,
   driverStatusStore,
   rideRequestStore,
   rideEventPublisher,
-  profileService,
 );
