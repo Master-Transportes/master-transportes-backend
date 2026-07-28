@@ -2,7 +2,6 @@ import { describe, beforeAll, afterAll, beforeEach, expect, it } from "bun:test"
 import { APIError } from "encore.dev/api";
 import { hashSync } from "bcrypt";
 import { like } from "drizzle-orm";
-import { accessService } from "@/services/access.service";
 import { userService } from "@/services/user.service";
 import { sessionStore } from "@/infra/session/redis-session-store";
 import { redis } from "@/infra/cache/redis-client";
@@ -55,7 +54,7 @@ describe("AccessService", () => {
 
   describe("signIn()", () => {
     it("returns access + refresh tokens for valid credentials", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
@@ -83,7 +82,7 @@ describe("AccessService", () => {
 
     it("rejects non-existent email", async () => {
       await expect(
-        accessService.signIn({
+        userService.signIn({
           login: `nobody-${TEST_PREFIX}@test.com`,
           password: DEFAULT_PASSWORD,
         } satisfies SignInDTO),
@@ -92,7 +91,7 @@ describe("AccessService", () => {
 
     it("rejects wrong password", async () => {
       await expect(
-        accessService.signIn({
+        userService.signIn({
           login: testUserEmail,
           password: "wrong-p4ssword-here",
         } satisfies SignInDTO),
@@ -101,7 +100,7 @@ describe("AccessService", () => {
 
     it("rejects invalid email format via validation", async () => {
       await expect(
-        accessService.signIn({
+        userService.signIn({
           login: "clearly-not-an-email",
           password: DEFAULT_PASSWORD,
         } satisfies SignInDTO),
@@ -110,7 +109,7 @@ describe("AccessService", () => {
 
     it("rejects short password via validation", async () => {
       await expect(
-        accessService.signIn({
+        userService.signIn({
           login: testUserEmail,
           password: "12345",
         } satisfies SignInDTO),
@@ -119,23 +118,23 @@ describe("AccessService", () => {
 
     it("returns same error message for wrong email or password", async () => {
       await expect(
-        accessService.signIn({ login: `random-${TEST_PREFIX}@test.com`, password: "irrelevant" } satisfies SignInDTO),
+        userService.signIn({ login: `random-${TEST_PREFIX}@test.com`, password: "irrelevant" } satisfies SignInDTO),
       ).rejects.toThrow("E-mail ou senha inválidos.");
 
       await expect(
-        accessService.signIn({ login: testUserEmail, password: "definitely-wrong" } satisfies SignInDTO),
+        userService.signIn({ login: testUserEmail, password: "definitely-wrong" } satisfies SignInDTO),
       ).rejects.toThrow("E-mail ou senha inválidos.");
     });
   });
 
   describe("refreshSession()", () => {
     it("returns new tokens for a valid refresh token", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      const refreshed = await accessService.refreshSession(result.sessionId, result.refreshToken);
+      const refreshed = await userService.refreshSession(result.sessionId, result.refreshToken);
 
       expect(refreshed).toHaveProperty("accessToken");
       expect(refreshed.accessToken.split(".").length).toBe(3);
@@ -153,14 +152,14 @@ describe("AccessService", () => {
     });
 
     it("rejects refresh with wrong refresh token", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
       let error: unknown;
       try {
-        await accessService.refreshSession(result.sessionId, "a".repeat(64));
+        await userService.refreshSession(result.sessionId, "a".repeat(64));
       } catch (e) {
         error = e;
       }
@@ -171,7 +170,7 @@ describe("AccessService", () => {
     it("rejects refresh for non-existent session", async () => {
       let error: unknown;
       try {
-        await accessService.refreshSession("00000000-0000-0000-0000-000000000000", "a".repeat(64));
+        await userService.refreshSession("00000000-0000-0000-0000-000000000000", "a".repeat(64));
       } catch (e) {
         error = e;
       }
@@ -179,16 +178,16 @@ describe("AccessService", () => {
     });
 
     it("rejects refresh after session is revoked", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      await accessService.logout(result.sessionId);
+      await userService.logout(result.sessionId);
 
       let error: unknown;
       try {
-        await accessService.refreshSession(result.sessionId, result.refreshToken);
+        await userService.refreshSession(result.sessionId, result.refreshToken);
       } catch (e) {
         error = e;
       }
@@ -198,18 +197,18 @@ describe("AccessService", () => {
 
   describe("refresh token rotation", () => {
     it("invalidates old refresh token after rotation", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
       const oldRefreshToken = result.refreshToken;
 
-      await accessService.refreshSession(result.sessionId, oldRefreshToken);
+      await userService.refreshSession(result.sessionId, oldRefreshToken);
 
       let error: unknown;
       try {
-        await accessService.refreshSession(result.sessionId, oldRefreshToken);
+        await userService.refreshSession(result.sessionId, oldRefreshToken);
       } catch (e) {
         error = e;
       }
@@ -220,16 +219,16 @@ describe("AccessService", () => {
 
   describe("logout / revoke", () => {
     it("prevents refresh after logout", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      await accessService.logout(result.sessionId);
+      await userService.logout(result.sessionId);
 
       let error: unknown;
       try {
-        await accessService.refreshSession(result.sessionId, result.refreshToken);
+        await userService.refreshSession(result.sessionId, result.refreshToken);
       } catch (e) {
         error = e;
       }
@@ -237,11 +236,11 @@ describe("AccessService", () => {
     });
 
     it("revokes all sessions on logoutAll", async () => {
-      const session1 = await accessService.signIn({
+      const session1 = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
-      const session2 = await accessService.signIn({
+      const session2 = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
@@ -249,7 +248,7 @@ describe("AccessService", () => {
       const countBefore = await sessionStore.count(testUserId);
       expect(countBefore).toBeGreaterThanOrEqual(2);
 
-      await accessService.logoutAll(testUserId);
+      await userService.logoutAll(testUserId);
 
       const countAfter = await sessionStore.count(testUserId);
       expect(countAfter).toBe(0);
@@ -257,7 +256,7 @@ describe("AccessService", () => {
       for (const s of [session1, session2]) {
         let error: unknown;
         try {
-          await accessService.refreshSession(s.sessionId, s.refreshToken);
+          await userService.refreshSession(s.sessionId, s.refreshToken);
         } catch (e) {
           error = e;
         }
@@ -277,7 +276,7 @@ describe("AccessService", () => {
         confirmPassword: DEFAULT_PASSWORD,
       } satisfies RegisterUserDTO);
 
-      const login = await accessService.signIn({
+      const login = await userService.signIn({
         login: email,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
@@ -287,14 +286,14 @@ describe("AccessService", () => {
       const decoded = verifyToken(login.accessToken);
       expect(decoded.userID).toBe(id);
 
-      const refreshed = await accessService.refreshSession(login.sessionId, login.refreshToken);
+      const refreshed = await userService.refreshSession(login.sessionId, login.refreshToken);
       expect(refreshed.accessToken).not.toBe(login.accessToken);
 
-      await accessService.logout(login.sessionId);
+      await userService.logout(login.sessionId);
 
       let error: unknown;
       try {
-        await accessService.refreshSession(login.sessionId, refreshed.refreshToken);
+        await userService.refreshSession(login.sessionId, refreshed.refreshToken);
       } catch (e) {
         error = e;
       }
@@ -329,7 +328,7 @@ describe("AccessService", () => {
 
   describe("verifyToken()", () => {
     it("decodes a valid token with userID and sessionID", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
@@ -348,7 +347,7 @@ describe("AccessService", () => {
     });
 
     it("rejects a tampered token", async () => {
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
@@ -362,7 +361,7 @@ describe("AccessService", () => {
 
   describe("getMe()", () => {
     it("returns full profile for the authenticated user", async () => {
-      const profile = await accessService.getMe(testUserId);
+      const profile = await userService.getMe(testUserId);
 
       expect(profile).toEqual({
         id: testUserId,
@@ -377,7 +376,7 @@ describe("AccessService", () => {
     it("throws notFound for a non-existent user ID", async () => {
       let error: unknown;
       try {
-        await accessService.getMe("00000000-0000-0000-0000-000000000000");
+        await userService.getMe("00000000-0000-0000-0000-000000000000");
       } catch (e) {
         error = e;
       }
@@ -386,7 +385,7 @@ describe("AccessService", () => {
     });
 
     it("caches the profile after first retrieval", async () => {
-      await accessService.getMe(testUserId);
+      await userService.getMe(testUserId);
 
       const cachedRaw = await redis.get(CACHE_KEYS.USER(testUserId));
       expect(cachedRaw).not.toBeNull();
@@ -395,7 +394,7 @@ describe("AccessService", () => {
     });
 
     it("populates USER_BASE cache for role middleware", async () => {
-      await accessService.getMe(testUserId);
+      await userService.getMe(testUserId);
 
       const cachedRaw = await redis.get(CACHE_KEYS.USER_BASE(testUserId));
       expect(cachedRaw).not.toBeNull();
@@ -434,7 +433,7 @@ describe("AccessService", () => {
 
     it("can authenticate even when inactive (auth check is at middleware level)", async () => {
       const email = `inactive-${TEST_PREFIX}@test.com`;
-      const result = await accessService.signIn({
+      const result = await userService.signIn({
         login: email,
         password: DEFAULT_PASSWORD,
       });
@@ -447,7 +446,7 @@ describe("AccessService", () => {
   describe("non-existent user sign in", () => {
     it("rejects sign in for completely unknown email", async () => {
       await expect(
-        accessService.signIn({
+        userService.signIn({
           login: `nonexistent-${TEST_PREFIX}@test.com`,
           password: DEFAULT_PASSWORD,
         }),

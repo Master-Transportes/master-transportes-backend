@@ -12,6 +12,21 @@ import type {
   UpdateProfileDTO,
   UserProfileResponse,
 } from "@/dto/user.interface";
+import type { SignInDTO, SignInResponse, GetMeResponse } from "@/dto/access.interface";
+
+export const login = api<SignInDTO, SignInResponse>(
+  { expose: true, method: "POST", path: "/client/login", auth: false },
+  async payload => userService.signIn(payload),
+);
+
+export const me = api<void, GetMeResponse>(
+  { expose: true, method: "GET", path: "/client/me", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return userService.getMe(userID);
+  },
+);
+
 export const register = api<RegisterUserDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/client/register", auth: false },
   async payload => userService.register(payload),
@@ -56,5 +71,3 @@ export const cancelRide = api<CancelRideParams, void>(
     await userService.cancelRide(userID, payload);
   },
 );
-
-// Consumer is started explicitly by the Encore app lifecycle, not at module load

@@ -1,6 +1,8 @@
 import { APIError } from "encore.dev/api";
-import { hash } from "bcrypt";
+import { hash, compare } from "bcrypt";
+import { generateToken, JWT_EXPIRES_IN } from "@/auth/auth";
 import { validateOrThrow } from "@/validations/schema-validator";
+import { SignInSchema, RefreshSchema } from "@/validations/dto/access.validate";
 import {
   CancelRideSchema,
   ChangePasswordSchema,
@@ -18,7 +20,10 @@ import type {
   RequestRideResponse,
   RequestRideDTO,
 } from "@/dto/user.interface";
+import type { SignInDTO, SignInResponse, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
 import type { IUserRepository } from "@/contracts/IUserRepository";
+import type { ISessionStore } from "@/contracts/ISessionStore";
+import type { IUserCache } from "@/contracts/IUserCache";
 import type { IRideRepository } from "@/contracts/IRideRepository";
 import type { IRideRequestStore } from "@/contracts/IRideRequestStore";
 import type { IDriverStatusStore } from "@/contracts/IDriverStatusStore";
@@ -29,6 +34,8 @@ import { rideRepository } from "@/repositories/ride.repository";
 import { rideRequestStore } from "@/infra/cache/ride-request-store";
 import { driverStatusStore } from "@/infra/cache/driver-status-store";
 import { rideEventPublisher } from "@/infra/rabbitmq/ride-event-publisher";
+import { sessionStore } from "@/infra/session/redis-session-store";
+import { userCache } from "@/infra/cache/user-cache";
 import { profileService } from "@/services/profile.service";
 import { randomUUID } from "crypto";
 import { isPgUniqueViolation } from "@/constants/database";
@@ -36,6 +43,8 @@ import { isPgUniqueViolation } from "@/constants/database";
 export class UserService {
   constructor(
     private readonly userRepo: IUserRepository,
+    private readonly sessionStore: ISessionStore,
+    private readonly userCacheService: IUserCache,
     private readonly rideRepo: IRideRepository,
     private readonly rideRequestStore: IRideRequestStore,
     private readonly driverStatusStore: IDriverStatusStore,
@@ -60,6 +69,73 @@ export class UserService {
       }
       throw error;
     }
+  }
+
+  async signIn(payload: SignInDTO): Promise<SignInResponse> {
+    const validated = validateOrThrow(SignInSchema, payload);
+    const { login, password } = validated;
+
+    const user = await this.userRepo.findByEmail(login.toLowerCase());
+    if (!user) throw APIError.unauthenticated("E-mail ou senha inválidos.");
+    if (user.role === "DRIVER") throw APIError.unauthenticated("E-mail ou senha inválidos.");
+
+    const validPassword = await compare(password, user.password);
+    if (!validPassword) throw APIError.unauthenticated("E-mail ou senha inválidos.");
+
+    const { sessionId, refreshToken } = await this.sessionStore.create({
+      userId: user.id,
+      role: user.role as "DRIVER" | "CLIENT" | "ADMIN" | "EMPLOYEE",
+    });
+
+    const accessToken = generateToken({ userID: user.id, sessionID: sessionId });
+
+    return { accessToken, refreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
+  }
+
+  async getMe(userID: string): Promise<GetMeResponse> {
+    const cached = await this.userCacheService.getProfile<GetMeResponse>(userID);
+    if (cached) return cached;
+
+    const user = await this.userRepo.findById(userID);
+    if (!user) throw APIError.notFound("Usuário não encontrado.");
+
+    const profile: GetMeResponse = {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      banReason: user.banReason,
+    };
+
+    await Promise.all([
+      this.userCacheService.setProfile(userID, profile as unknown as Record<string, unknown>),
+      this.userCacheService.setBase(userID, { role: user.role, status: user.status }),
+    ]);
+
+    return profile;
+  }
+
+  async logout(sessionId: string): Promise<void> {
+    if (!sessionId) throw APIError.invalidArgument("Nenhuma sessão ativa.");
+    await this.sessionStore.revoke(sessionId);
+  }
+
+  async logoutAll(userId: string): Promise<void> {
+    await this.sessionStore.revokeAll(userId);
+  }
+
+  async refreshSession(sessionId: string, refreshToken: string): Promise<RefreshResponse> {
+    validateOrThrow(RefreshSchema, { refreshToken, sessionId });
+    const { refreshToken: newRefreshToken, userId } = await this.sessionStore.refresh(sessionId, refreshToken);
+
+    const accessToken = generateToken({ userID: userId, sessionID: sessionId });
+
+    return { accessToken, refreshToken: newRefreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
+  }
+
+  async getUserSessions(userId: string): Promise<string[]> {
+    return this.sessionStore.getUserSessionIds(userId);
   }
 
   async getProfile(userID: string): Promise<UserProfileResponse> {
@@ -132,6 +208,8 @@ export class UserService {
 
 export const userService = new UserService(
   userRepository,
+  sessionStore,
+  userCache,
   rideRepository,
   rideRequestStore,
   driverStatusStore,

@@ -16,6 +16,34 @@ import type {
   ActiveRideResponse,
   DriverProfileResponse,
 } from "@/dto/driver.interface";
+import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
+
+export const login = api<SignInDTO, SignInResponse>(
+  { expose: true, method: "POST", path: "/driver/login", auth: false },
+  async payload => driverService.signIn(payload),
+);
+
+export const me = api<void, DriverProfileResponse>(
+  { expose: true, method: "GET", path: "/driver/me", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.getMe(userID);
+  },
+);
+
+export const logout = api<void, { message: string }>(
+  { expose: true, method: "POST", path: "/driver/logout", auth: true },
+  async () => {
+    const { sessionID } = auth.getAuthData()!;
+    await driverService.logout(sessionID);
+    return { message: "Logout realizado com sucesso." };
+  },
+);
+
+export const refresh = api<RefreshDTO, RefreshResponse>(
+  { expose: true, method: "POST", path: "/driver/refresh", auth: false },
+  async ({ refreshToken, sessionId }) => driverService.refreshSession(sessionId, refreshToken),
+);
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
