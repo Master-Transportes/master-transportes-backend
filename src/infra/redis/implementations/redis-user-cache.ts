@@ -1,7 +1,7 @@
-import { redis } from "@/infra/cache/redis-client";
-import { CACHE_KEYS } from "@/infra/cache/keys-cache";
-import { metrics } from "@/infra/metrics";
-import type { IUserCache } from "@/contracts/IUserCache";
+import { redis } from "@/infra/redis/redis-client";
+import { CACHE_KEYS } from "@/infra/redis/keys-cache";
+import { metrics } from "@/infra/metrics/metrics";
+import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
 
 export class RedisUserCache implements IUserCache {
   async getProfile<T>(userId: string): Promise<T | null> {
@@ -13,6 +13,15 @@ export class RedisUserCache implements IUserCache {
     const parsed = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
     return parsed as T;
+  }
+
+  async getBase(userId: string): Promise<{ role: string; status: string } | null> {
+    const startTime = Date.now();
+    const raw = await redis.get(CACHE_KEYS.USER_BASE(userId));
+    metrics.incCounter("user_cache_get_base_total");
+    metrics.observeHistogram("user_cache_operation_duration_ms", Date.now() - startTime);
+    if (!raw) return null;
+    return JSON.parse(raw) as { role: string; status: string };
   }
 
   async setProfile(userId: string, profile: Record<string, unknown>): Promise<void> {

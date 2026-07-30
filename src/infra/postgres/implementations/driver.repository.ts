@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { drivers, driverCredentials } from "@/infra/db/schema";
 import { db } from "@/infra/db/drizzle";
-import type { IDriverRepository, DriverRow, CreateDriverData, DriverWithProfile } from "@/contracts/IDriverRepository";
+import type { IDriverRepository, DriverRow, CreateDriverData, DriverWithProfile } from "@/infra/postgres/contracts/IDriverRepository";
 
 export class DriverRepository implements IDriverRepository {
   async create(data: CreateDriverData): Promise<DriverRow> {

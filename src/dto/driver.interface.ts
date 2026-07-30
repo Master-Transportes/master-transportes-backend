@@ -1,4 +1,4 @@
-import type { RideDetailedRow } from "@/contracts/IRideRepository";
+import type { RideDetailedRow } from "@/infra/postgres/contracts/IRideRepository";
 import type { DriverStatus } from "@/interfaces/user-types";
 
 export interface UpdateDriverLocationDTO {

@@ -1,5 +1,5 @@
 import { publishRideRequested, publishRideCancelled, publishOfferAccepted } from "@/infra/rabbitmq/ride-publisher";
-import type { IRideEventPublisher } from "@/contracts/IRideEventPublisher";
+import type { IRideEventPublisher } from "@/infra/rabbitmq/contracts/IRideEventPublisher";
 
 export class RabbitRideEventPublisher implements IRideEventPublisher {
   async publishRideRequested(data: {

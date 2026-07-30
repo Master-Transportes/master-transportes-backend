@@ -1,11 +1,11 @@
 import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
-import type { IUserRepository, UserRow } from "@/contracts/IUserRepository";
-import type { IUserCache } from "@/contracts/IUserCache";
+import type { IUserRepository, UserRow } from "@/infra/postgres/contracts/IUserRepository";
+import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
 import type { UserProfileResponse, UpdateProfileDTO, ChangePasswordDTO } from "@/dto/user.interface";
-import { userRepository } from "@/repositories/user.repository";
-import { userCache } from "@/infra/cache/user-cache";
+import { userRepository } from "@/infra/postgres";
+import { userCache } from "@/infra/redis";
 import { isPgUniqueViolation } from "@/constants/database";
 import type { ZodObject, ZodRawShape } from "zod";
 

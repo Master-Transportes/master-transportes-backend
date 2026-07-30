@@ -1,6 +1,6 @@
-import { redis } from "@/infra/cache/redis-client";
-import { CACHE_KEYS } from "@/infra/cache/keys-cache";
-import type { IRideRequestStore } from "@/contracts/IRideRequestStore";
+import { redis } from "@/infra/redis/redis-client";
+import { CACHE_KEYS } from "@/infra/redis/keys-cache";
+import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStore";
 
 export class RedisRideRequestStore implements IRideRequestStore {
   async lock(passengerId: string, rideId: string): Promise<boolean> {

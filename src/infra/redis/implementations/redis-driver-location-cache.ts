@@ -1,8 +1,8 @@
-import type { IDriverLocationCache } from "@/contracts/IDriverLocationCache";
+import type { IDriverLocationCache } from "@/infra/redis/contracts/IDriverLocationCache";
 import { latLngToCell } from "h3-js";
-import { redis } from "./redis-client";
-import { metrics } from "../metrics";
-import { H3_RESOLUTION, MATCHING_KEYS, DRIVER_LOCATION_TTL } from "./keys-cache";
+import { redis } from "@/infra/redis/redis-client";
+import { metrics } from "@/infra/metrics/metrics";
+import { H3_RESOLUTION, MATCHING_KEYS, DRIVER_LOCATION_TTL } from "@/infra/redis/keys-cache";
 
 export class RedisDriverLocationCache implements IDriverLocationCache {
   async saveLocation(driverId: string, latitude: number, longitude: number): Promise<void> {

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { users } from "@/infra/db/schema";
 import { db } from "@/infra/db/drizzle";
-import type { IUserRepository, UserRow, UserPasswordRow, CreateUserData, UpdateUserData } from "@/contracts/IUserRepository";
+import type { IUserRepository, UserRow, UserPasswordRow, CreateUserData, UpdateUserData } from "@/infra/postgres/contracts/IUserRepository";
 
 export class UserRepository implements IUserRepository {
   async findById(id: string): Promise<UserRow | null> {

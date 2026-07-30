@@ -1,8 +1,8 @@
 import { GetRegionPayload, GetRegionResponse } from "@/dto/area.interface";
 import { GetRegionSchema } from "@/validations/dto/area.validate";
 import { validateOrThrow } from "@/validations/schema-validator";
-import type { IAreaRepository } from "@/contracts/IAreaRepository";
-import { areaRepository } from "@/repositories/area.repository";
+import type { IAreaRepository } from "@/infra/postgres/contracts/IAreaRepository";
+import { areaRepository } from "@/infra/postgres";
 import { resolveOperationalRegion } from "@/constants/regions";
 
 function slugify(text: string): string {

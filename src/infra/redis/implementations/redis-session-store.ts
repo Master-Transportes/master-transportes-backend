@@ -1,11 +1,11 @@
 import { APIError } from "encore.dev/api";
 import { createHash, randomBytes, randomUUID } from "crypto";
-import { CACHE_KEYS } from "@/infra/cache/keys-cache";
-import { redis } from "@/infra/cache/redis-client";
-import { metrics } from "@/infra/metrics";
+import { CACHE_KEYS } from "@/infra/redis/keys-cache";
+import { redis } from "@/infra/redis/redis-client";
+import { metrics } from "@/infra/metrics/metrics";
 import type { Session } from "@/dto/session.interface";
 import type { Role } from "@/infra/db/schema";
-import type { ISessionStore } from "@/contracts/ISessionStore";
+import type { ISessionStore } from "@/infra/redis/contracts/ISessionStore";
 
 const SEVEN_DAYS_IN_S = 7 * 24 * 60 * 60;
 

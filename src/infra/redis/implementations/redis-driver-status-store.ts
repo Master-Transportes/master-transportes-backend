@@ -1,7 +1,7 @@
-import { redis } from "@/infra/cache/redis-client";
-import { MATCHING_KEYS } from "@/infra/cache/keys-cache";
-import { DRIVER_LOCATION_TTL } from "@/infra/cache/keys-cache";
-import type { IDriverStatusStore } from "@/contracts/IDriverStatusStore";
+import { redis } from "@/infra/redis/redis-client";
+import { MATCHING_KEYS } from "@/infra/redis/keys-cache";
+import { DRIVER_LOCATION_TTL } from "@/infra/redis/keys-cache";
+import type { IDriverStatusStore } from "@/infra/redis/contracts/IDriverStatusStore";
 
 export class RedisDriverStatusStore implements IDriverStatusStore {
   async setAvailable(driverId: string): Promise<void> {

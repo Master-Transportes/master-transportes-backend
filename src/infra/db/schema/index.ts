@@ -58,7 +58,9 @@ export const drivers = pgTable(
   "Driver",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("userId").unique().references(() => users.id),
+    userId: uuid("userId")
+      .unique()
+      .references(() => users.id),
     fullName: varchar("fullName", { length: 120 }).notNull(),
     status: DriverStatus("status").default("PENDING").notNull(),
     rejectionReason: varchar("rejectionReason", { length: 255 }),
@@ -66,10 +68,7 @@ export const drivers = pgTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
-  table => [
-    index("Driver_status_idx").on(table.status),
-    index("Driver_userId_idx").on(table.userId),
-  ],
+  table => [index("Driver_status_idx").on(table.status), index("Driver_userId_idx").on(table.userId)],
 );
 
 export const driverLicenses = pgTable(

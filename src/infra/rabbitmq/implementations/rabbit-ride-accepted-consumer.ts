@@ -2,11 +2,11 @@ import "dotenv/config";
 import { connect, type Channel, type ChannelModel, type ConsumeMessage } from "amqplib";
 import { z } from "zod";
 import { latLngToCell } from "h3-js";
-import { H3_RESOLUTION } from "@/infra/cache/keys-cache";
-import { rideRepository } from "@/repositories/ride.repository";
+import { H3_RESOLUTION } from "@/infra/redis/keys-cache";
+import { rideRepository } from "@/infra/postgres";
 import { areaService } from "@/services/area.service";
 import { logger } from "@/infra/observability/logger";
-import type { CreateRideData } from "@/contracts/IRideRepository";
+import type { CreateRideData } from "@/infra/postgres/contracts/IRideRepository";
 
 const EXCHANGE = "ride.exchange";
 const QUEUE = "api.ride.driver.accepted";

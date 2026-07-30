@@ -3,7 +3,7 @@ import { rides, rideLocations } from "@/infra/db/schema";
 import type { RideStatus } from "@/infra/db/schema";
 import { db } from "@/infra/db/drizzle";
 import { ACTIVE_RIDE_STATUSES } from "@/constants/ride";
-import type { IRideRepository, RideDetailedRow, CreateRideData, RideActiveRow } from "@/contracts/IRideRepository";
+import type { IRideRepository, RideDetailedRow, CreateRideData, RideActiveRow } from "@/infra/postgres/contracts/IRideRepository";
 
 function toRideDetailed(row: {
   id: string;

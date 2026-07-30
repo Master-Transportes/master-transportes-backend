@@ -14,4 +14,4 @@ export const MATCHING_KEYS = {
 } as const;
 
 export const H3_RESOLUTION = 9;
-export const DRIVER_LOCATION_TTL = 300; // 5 minutos
+export const DRIVER_LOCATION_TTL = 300;

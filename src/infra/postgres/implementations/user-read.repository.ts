@@ -6,7 +6,7 @@ import type {
   DashboardActionResponse,
 } from "@/dto/dashboard.interface";
 import { db } from "@/infra/db/drizzle";
-import type { IUserReadRepository } from "@/contracts/IUserReadRepository";
+import type { IUserReadRepository } from "@/infra/postgres/contracts/IUserReadRepository";
 
 const LIST_COLUMNS = {
   id: users.id,
