@@ -14,19 +14,21 @@ import {
 } from "@/validations/dto/driver.validate";
 import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
-import type { IDriverCredentialRepository } from "@/infra/drizzle/contracts/IDriverCredentialRepository";
+import type { IUserRepository } from "@/infra/drizzle/contracts/IUserRepository";
 import type { IDriverRepository } from "@/infra/drizzle/contracts/IDriverRepository";
 import type { DriverProfileResponse } from "@/dto/driver.interface";
 import type { IRideRepository, RideDetailedRow } from "@/infra/drizzle/contracts/IRideRepository";
 import type { ISessionStore } from "@/infra/redis/contracts/ISessionStore";
+import type { IDriverCache } from "@/infra/redis/contracts/IDriverCache";
 import type { IDriverLocationCache } from "@/infra/redis/contracts/IDriverLocationCache";
 import type { IDriverStatusStore } from "@/infra/redis/contracts/IDriverStatusStore";
 import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStore";
 import type { IRideEventPublisher } from "@/infra/rabbitmq/contracts/IRideEventPublisher";
+import { userRepository } from "@/infra/drizzle";
 import { driverRepository } from "@/infra/drizzle";
-import { driverCredentialRepository } from "@/infra/drizzle";
 import { rideRepository } from "@/infra/drizzle";
 import { sessionStore } from "@/infra/redis";
+import { driverCache } from "@/infra/redis";
 import { driverLocationCache } from "@/infra/redis";
 import { driverStatusStore } from "@/infra/redis";
 import { rideRequestStore } from "@/infra/redis";
@@ -39,7 +41,7 @@ import { COMPLETION_RADIUS_METERS } from "@/constants/ride";
 
 export class DriverService {
   constructor(
-    private readonly credentialRepo: IDriverCredentialRepository,
+    private readonly userRepo: IUserRepository,
     private readonly driverRepo: IDriverRepository,
     private readonly rideRepo: IRideRepository,
     private readonly driverLocationCache: IDriverLocationCache,
@@ -47,6 +49,7 @@ export class DriverService {
     private readonly rideRequestStore: IRideRequestStore,
     private readonly rideEventPublisher: IRideEventPublisher,
     private readonly sessionStore: ISessionStore,
+    private readonly driverCacheService: IDriverCache,
   ) {}
 
   async register(payload: RegisterDriverDTO): Promise<{ id: string }> {
@@ -54,10 +57,8 @@ export class DriverService {
 
     const hashedPassword = await hash(validated.password, 10);
     try {
-      const driver = await this.driverRepo.create({ fullName: validated.fullName });
-
-      await this.credentialRepo.create({
-        driverId: driver.id,
+      const driver = await this.driverRepo.create({
+        fullName: validated.fullName,
         email: validated.email.toLowerCase(),
         password: hashedPassword,
       });
@@ -75,25 +76,31 @@ export class DriverService {
     const validated = validateOrThrow(SignInSchema, payload);
     const { login, password } = validated;
 
-    const credential = await this.credentialRepo.findByEmail(login.toLowerCase());
-    if (!credential) throw APIError.unauthenticated("E-mail ou senha inválidos.");
+    const driver = await this.driverRepo.findByEmail(login.toLowerCase());
+    if (!driver) throw APIError.unauthenticated("E-mail ou senha inválidos.");
 
-    const valid = await compare(password, credential.password);
+    const valid = await compare(password, driver.password);
     if (!valid) throw APIError.unauthenticated("E-mail ou senha inválidos.");
 
     const { sessionId, refreshToken } = await this.sessionStore.create({
-      userId: credential.driverId,
+      userId: driver.id,
       role: "DRIVER",
     });
 
-    const accessToken = generateToken({ userID: credential.driverId, sessionID: sessionId });
+    const accessToken = generateToken({ userID: driver.id, sessionID: sessionId });
 
     return { accessToken, refreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
   }
 
   async getMe(driverId: string): Promise<DriverProfileResponse> {
+    const cached = await this.driverCacheService.getProfile<DriverProfileResponse>(driverId);
+    if (cached) return cached;
+
     const profile = await this.driverRepo.findById(driverId);
     if (!profile) throw APIError.notFound("Motorista não encontrado.");
+
+    await this.driverCacheService.setProfile(driverId, profile as unknown as Record<string, unknown>);
+
     return profile;
   }
 
@@ -129,16 +136,17 @@ export class DriverService {
     const validated = validateOrThrow(UpdateDriverProfileSchema, payload);
     const updated = await this.driverRepo.updateProfile(driverId, validated);
     if (!updated) throw APIError.notFound("Motorista não encontrado.");
+    await this.driverCacheService.invalidate(driverId);
     return updated;
   }
 
   async changePassword(driverId: string, payload: ChangePasswordDTO): Promise<void> {
     const { currentPassword, newPassword } = validateOrThrow(ChangeDriverPasswordSchema, payload);
 
-    const cred = await this.credentialRepo.findByDriverId(driverId);
-    if (!cred) throw APIError.notFound("Motorista não encontrado.");
+    const driver = await this.driverRepo.findPasswordById(driverId);
+    if (!driver) throw APIError.notFound("Motorista não encontrado.");
 
-    const valid = await compare(currentPassword, cred.password);
+    const valid = await compare(currentPassword, driver.password);
     if (!valid) throw APIError.invalidArgument("Senha atual incorreta.");
 
     const hashed = await hash(newPassword, 10);
@@ -216,7 +224,7 @@ export class DriverService {
 }
 
 export const driverService = new DriverService(
-  driverCredentialRepository,
+  userRepository,
   driverRepository,
   rideRepository,
   driverLocationCache,
@@ -224,4 +232,5 @@ export const driverService = new DriverService(
   rideRequestStore,
   rideEventPublisher,
   sessionStore,
+  driverCache,
 );

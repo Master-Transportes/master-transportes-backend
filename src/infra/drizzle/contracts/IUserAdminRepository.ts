@@ -1,10 +1,7 @@
-import type {
-  PaginatedUsersResponse,
-  DashboardActionResponse,
-} from "@/dto/dashboard.interface";
+import type { PaginatedUsersResponse, DashboardActionResponse } from "@/dto/dashboard.interface";
 
 export interface ListUsersData {
-  role: "DRIVER" | "CLIENT";
+  role: "CLIENT";
   page: number;
   limit: number;
   search: string;
@@ -18,7 +15,7 @@ export interface ListSystemUsersData {
   status?: "ACTIVE" | "BANNED" | "INACTIVE";
 }
 
-export interface IUserReadRepository {
+export interface IUserAdminRepository {
   listUsers(data: ListUsersData): Promise<PaginatedUsersResponse>;
   listSystemUsers(data: ListSystemUsersData): Promise<PaginatedUsersResponse>;
   activateUser(userId: string): Promise<DashboardActionResponse | null>;

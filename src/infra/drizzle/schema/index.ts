@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
   pgTable,
-  pgEnum,
   uuid,
   varchar,
   integer,
@@ -14,23 +13,17 @@ import {
   customType,
 } from "drizzle-orm/pg-core";
 
-export const Role = pgEnum("Role", ["DRIVER", "CLIENT", "ADMIN", "EMPLOYEE"]);
-export type Role = "DRIVER" | "CLIENT" | "ADMIN" | "EMPLOYEE";
+export const ROLES = ["CLIENT", "ADMIN", "EMPLOYEE"] as const;
+export type Role = (typeof ROLES)[number];
 
-export const UserStatus = pgEnum("UserStatus", ["ACTIVE", "BANNED", "INACTIVE"]);
-export type UserStatus = "ACTIVE" | "BANNED" | "INACTIVE";
+export const USER_STATUSES = ["ACTIVE", "BANNED", "INACTIVE"] as const;
+export type UserStatus = (typeof USER_STATUSES)[number];
 
-export const DriverStatus = pgEnum("DriverStatus", ["PENDING", "APPROVED", "REJECTED", "SUSPENDED"]);
-export type DriverStatus = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
+export const DRIVER_STATUSES = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED", "BANNED"] as const;
+export type DriverStatus = (typeof DRIVER_STATUSES)[number];
 
-export const RideStatus = pgEnum("RideStatus", [
-  "DRIVER_ASSIGNED",
-  "DRIVER_ARRIVING",
-  "IN_PROGRESS",
-  "COMPLETED",
-  "CANCELLED",
-]);
-export type RideStatus = "DRIVER_ASSIGNED" | "DRIVER_ARRIVING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export const RIDE_STATUSES = ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
+export type RideStatus = (typeof RIDE_STATUSES)[number];
 
 export const geometry = customType<{ data: string }>({
   dataType() {
@@ -39,177 +32,180 @@ export const geometry = customType<{ data: string }>({
 });
 
 export const users = pgTable(
-  "User",
+  "users",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    fullName: varchar("fullName", { length: 120 }).notNull(),
+    fullName: varchar("full_name", { length: 120 }).notNull(),
     email: varchar("email", { length: 255 }).notNull().unique(),
     password: varchar("password").notNull(),
-    role: Role("role").default("CLIENT").notNull(),
-    status: UserStatus("status").default("ACTIVE").notNull(),
-    banReason: varchar("banReason", { length: 255 }),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-  },
-  table => [index("User_role_idx").on(table.role), index("User_createdAt_idx").on(table.createdAt)],
-);
-
-export const drivers = pgTable(
-  "Driver",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("userId")
-      .unique()
-      .references(() => users.id),
-    fullName: varchar("fullName", { length: 120 }).notNull(),
-    status: DriverStatus("status").default("PENDING").notNull(),
-    rejectionReason: varchar("rejectionReason", { length: 255 }),
-    approvedAt: timestamp("approvedAt"),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-  },
-  table => [index("Driver_status_idx").on(table.status), index("Driver_userId_idx").on(table.userId)],
-);
-
-export const driverLicenses = pgTable(
-  "DriverLicense",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    driverId: uuid("driverId")
-      .notNull()
-      .references(() => drivers.id),
-    cnh: varchar("cnh", { length: 20 }).notNull(),
-    category: varchar("category", { length: 5 }).notNull(),
-    validFrom: date("validFrom").notNull().defaultNow(),
-    validUntil: date("validUntil"),
-    isActive: boolean("isActive").default(false).notNull(),
-    isVerified: boolean("isVerified").default(false),
-    verifiedAt: timestamp("verifiedAt"),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+    role: varchar("role", { length: 20 }).$type<Role>().notNull().default("CLIENT"),
+    status: varchar("status", { length: 20 }).$type<UserStatus>().notNull().default("ACTIVE"),
+    banReason: varchar("ban_reason", { length: 255 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
   },
   table => [
-    index("DriverLicense_driverId_idx").on(table.driverId),
-    uniqueIndex("DriverLicense_active_unique")
-      .on(table.driverId)
-      .where(sql`"isActive" = true`),
+    index("users_role_idx").on(table.role),
+    index("users_status_idx").on(table.status),
+    index("users_created_at_idx").on(table.createdAt),
+    sql`CONSTRAINT users_role_check CHECK (${table.role} IN ('CLIENT', 'ADMIN', 'EMPLOYEE'))`,
+    sql`CONSTRAINT users_status_check CHECK (${table.status} IN ('ACTIVE', 'BANNED', 'INACTIVE'))`,
   ],
 );
 
-export const driverCredentials = pgTable(
-  "DriverCredential",
+export const drivers = pgTable(
+  "drivers",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    driverId: uuid("driverId")
-      .notNull()
-      .unique()
-      .references(() => drivers.id),
+    fullName: varchar("full_name", { length: 120 }).notNull(),
     email: varchar("email", { length: 255 }).notNull().unique(),
     password: varchar("password").notNull(),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+    status: varchar("status", { length: 20 }).$type<DriverStatus>().notNull().default("PENDING"),
+    rejectionReason: varchar("rejection_reason", { length: 255 }),
+    banReason: varchar("ban_reason", { length: 255 }),
+    approvedAt: timestamp("approved_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
   },
-  table => [index("DriverCredential_email_idx").on(table.email)],
+  table => [
+    index("drivers_status_idx").on(table.status),
+    index("drivers_created_at_idx").on(table.createdAt),
+    sql`CONSTRAINT drivers_status_check CHECK (${table.status} IN ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED', 'BANNED'))`,
+  ],
+);
+
+export const driverLicenses = pgTable(
+  "driver_licenses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    driverId: uuid("driver_id")
+      .notNull()
+      .references(() => drivers.id, { onDelete: "cascade" }),
+    cnh: varchar("cnh", { length: 20 }).notNull(),
+    category: varchar("category", { length: 5 }).notNull(),
+    validFrom: date("valid_from").notNull().defaultNow(),
+    validUntil: date("valid_until"),
+    isActive: boolean("is_active").default(false).notNull(),
+    isVerified: boolean("is_verified").default(false),
+    verifiedAt: timestamp("verified_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
+  },
+  table => [
+    index("driver_licenses_driver_id_idx").on(table.driverId),
+    uniqueIndex("driver_licenses_active_unique")
+      .on(table.driverId)
+      .where(sql`"is_active" = true`),
+    uniqueIndex("driver_licenses_cnh_unique").on(table.cnh),
+  ],
 );
 
 export const vehicles = pgTable(
-  "Vehicle",
+  "vehicles",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    driverId: uuid("driverId")
+    driverId: uuid("driver_id")
       .notNull()
-      .references(() => drivers.id),
+      .references(() => drivers.id, { onDelete: "cascade" }),
     brand: varchar("brand", { length: 50 }).notNull(),
     model: varchar("model", { length: 80 }).notNull(),
     year: integer("year").notNull(),
     color: varchar("color", { length: 30 }).notNull(),
     plate: varchar("plate", { length: 10 }).notNull().unique(),
-    isActive: boolean("isActive").default(false).notNull(),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+    isActive: boolean("is_active").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
   },
   table => [
-    index("Vehicle_driverId_idx").on(table.driverId),
-    index("Vehicle_plate_idx").on(table.plate),
-    uniqueIndex("Vehicle_active_unique")
+    index("vehicles_driver_id_idx").on(table.driverId),
+    index("vehicles_plate_idx").on(table.plate),
+    uniqueIndex("vehicles_active_unique")
       .on(table.driverId)
-      .where(sql`"isActive" = true`),
+      .where(sql`"is_active" = true`),
   ],
 );
 
 export const rides = pgTable(
-  "Ride",
+  "rides",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    clientId: uuid("clientId")
+    clientId: uuid("client_id")
       .notNull()
-      .references(() => users.id),
-    driverId: uuid("driverId")
+      .references(() => users.id, { onDelete: "cascade" }),
+    driverId: uuid("driver_id")
       .notNull()
-      .references(() => drivers.id),
-    status: RideStatus("status").default("DRIVER_ASSIGNED").notNull(),
-    startedAt: timestamp("startedAt"),
-    completedAt: timestamp("completedAt"),
-    cancelledAt: timestamp("cancelledAt"),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+      .references(() => drivers.id, { onDelete: "cascade" }),
+    status: varchar("status", { length: 30 }).$type<RideStatus>().notNull().default("DRIVER_ASSIGNED"),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    cancelledAt: timestamp("cancelled_at"),
+    price: integer("price"),
+    distance: integer("distance"),
+    duration: integer("duration"),
+    cancelledBy: varchar("cancelled_by", { length: 20 }),
+    cancelReason: varchar("cancel_reason", { length: 255 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
   },
   table => [
-    index("Ride_clientId_idx").on(table.clientId),
-    index("Ride_driverId_idx").on(table.driverId),
-    index("Ride_status_idx").on(table.status),
-    index("Ride_createdAt_idx").on(table.createdAt),
-    index("Ride_client_active_idx")
-      .on(table.clientId)
-      .where(sql`"status" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS')`),
-    index("Ride_driver_active_idx")
-      .on(table.driverId)
-      .where(sql`"status" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS')`),
+    index("rides_client_id_idx").on(table.clientId),
+    index("rides_driver_id_idx").on(table.driverId),
+    index("rides_status_idx").on(table.status),
+    index("rides_created_at_idx").on(table.createdAt),
+    index("rides_client_id_status_idx").on(table.clientId, table.status),
+    index("rides_driver_id_status_idx").on(table.driverId, table.status),
+    sql`CONSTRAINT rides_status_check CHECK (${table.status} IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'))`,
   ],
 );
 
 export const rideLocations = pgTable(
-  "RideLocation",
+  "ride_locations",
   {
-    rideId: uuid("rideId")
+    rideId: uuid("ride_id")
       .notNull()
       .primaryKey()
-      .references(() => rides.id),
-    originName: varchar("originName", { length: 200 }).notNull(),
-    originLat: doublePrecision("originLat").notNull(),
-    originLng: doublePrecision("originLng").notNull(),
-    originH3: varchar("originH3", { length: 20 }).notNull(),
-    destinationName: varchar("destinationName", { length: 200 }).notNull(),
-    destinationLat: doublePrecision("destinationLat").notNull(),
-    destinationLng: doublePrecision("destinationLng").notNull(),
-    destinationH3: varchar("destinationH3", { length: 20 }).notNull(),
-    regionId: varchar("regionId", { length: 30 }).notNull().default("am-interior"),
-    municipalityId: varchar("municipalityId", { length: 20 }).notNull().default("unknown"),
-    createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+      .references(() => rides.id, { onDelete: "cascade" }),
+    originName: varchar("origin_name", { length: 200 }).notNull(),
+    originLat: doublePrecision("origin_lat").notNull(),
+    originLng: doublePrecision("origin_lng").notNull(),
+    originH3: varchar("origin_h3", { length: 20 }).notNull(),
+    destinationName: varchar("destination_name", { length: 200 }).notNull(),
+    destinationLat: doublePrecision("destination_lat").notNull(),
+    destinationLng: doublePrecision("destination_lng").notNull(),
+    destinationH3: varchar("destination_h3", { length: 20 }).notNull(),
+    regionId: varchar("region_id", { length: 30 }).notNull().default("am-interior"),
+    municipalityId: varchar("municipality_id", { length: 20 }).notNull().default("unknown"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    deletedAt: timestamp("deleted_at"),
   },
   table => [
-    index("RideLocation_regionId_idx").on(table.regionId),
-    index("RideLocation_municipalityId_idx").on(table.municipalityId),
+    index("ride_locations_region_id_idx").on(table.regionId),
+    index("ride_locations_municipality_id_idx").on(table.municipalityId),
   ],
 );
 
 export const areas = pgTable(
-  "Area",
+  "areas",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     municipality: varchar("municipality").notNull(),
-    abbrevState: varchar("abbrevState").notNull(),
+    abbrevState: varchar("abbrev_state").notNull(),
     geometry: geometry("geometry"),
-    cdMun: varchar("cdMun").notNull(),
-    cdUf: varchar("cdUf").notNull(),
-    nmUf: varchar("nmUf").notNull(),
-    cdRegia: varchar("cdRegia").notNull(),
-    nmRegia: varchar("nmRegia").notNull(),
+    cdMun: varchar("cd_mun").notNull(),
+    cdUf: varchar("cd_uf").notNull(),
+    nmUf: varchar("nm_uf").notNull(),
+    cdRegia: varchar("cd_regia").notNull(),
+    nmRegia: varchar("nm_regia").notNull(),
   },
   table => [
-    index("Area_municipality_idx").on(table.municipality),
-    index("Area_abbrevState_idx").on(table.abbrevState),
-    index("Area_geometry_idx").using("gist", table.geometry),
+    index("areas_municipality_idx").on(table.municipality),
+    index("areas_abbrev_state_idx").on(table.abbrevState),
+    index("areas_geometry_idx").using("gist", table.geometry),
   ],
 );

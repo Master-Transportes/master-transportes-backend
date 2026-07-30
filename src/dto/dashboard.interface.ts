@@ -25,7 +25,7 @@ export interface BanUserParams {
 }
 
 export interface ListUsersParams {
-  role?: "DRIVER" | "CLIENT";
+  role?: "CLIENT";
   page?: number;
   limit?: number;
   search?: string;

@@ -1,4 +1,4 @@
-import type { Role, UserStatus } from "@/infra/drizzle/schema";
+import type { UserStatus } from "@/infra/drizzle/schema";
 
 export interface SignInDTO {
   login: string;
@@ -32,7 +32,6 @@ export interface GetMeResponse {
   id: string;
   fullName: string;
   email: string;
-  role: Role;
   status: UserStatus;
   banReason: string | null;
 }

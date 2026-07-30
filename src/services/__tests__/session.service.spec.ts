@@ -258,7 +258,7 @@ describe("RedisSessionStore", () => {
           fullName: "No Sessions",
           email: uniqueEmail,
           password: "hash",
-          role: "DRIVER",
+          role: "CLIENT",
         })
         .returning({ id: users.id });
 
@@ -289,7 +289,7 @@ describe("RedisSessionStore", () => {
           fullName: "No Revoke Test",
           email: uniqueEmail,
           password: "hash",
-          role: "DRIVER",
+          role: "CLIENT",
         })
         .returning({ id: users.id });
 

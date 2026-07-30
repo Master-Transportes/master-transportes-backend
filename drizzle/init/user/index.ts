@@ -1,8 +1,9 @@
 import { hash } from "bcrypt";
 import { eq } from "drizzle-orm";
 import { db } from "@/infra/drizzle/drizzle";
-import { users, drivers, driverCredentials } from "@/infra/drizzle/schema";
+import { users, drivers } from "@/infra/drizzle/schema";
 
+// ---------- DADOS DE EXEMPLO ----------
 const userSeedData = [
   { fullName: "Enderson User da Silva", email: "user@admin.com", role: "CLIENT" as const },
   { fullName: "Enderson Admin da Silva", email: "admin@admin.com", role: "ADMIN" as const },
@@ -13,49 +14,54 @@ const driverSeedData = [
   { fullName: "Enderson Driver1 da Silva", email: "driver2@admin.com" },
 ];
 
-async function seedUsers(): Promise<void> {
-  const password = await hash("admin123", 10);
+// ---------- FUNÇÃO PRINCIPAL ----------
+async function seed(): Promise<void> {
+  const userPassword = await hash("admin123", 10);
+  const driverPassword = await hash("admin123", 10);
 
+  // 1. Semear usuários (clientes/admins)
   for (const user of userSeedData) {
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, user.email));
 
     if (existing) {
-      await db.update(users).set({ password, updatedAt: new Date() }).where(eq(users.email, user.email));
-      console.log(`Updated password for ${user.email}`);
+      await db.update(users).set({ password: userPassword, updatedAt: new Date() }).where(eq(users.email, user.email));
+      console.log(`🔐 Senha atualizada para ${user.email}`);
     } else {
       await db.insert(users).values({
         fullName: user.fullName,
         email: user.email,
-        password,
+        password: userPassword,
         role: user.role,
+        status: "ACTIVE",
       });
-      console.log(`Created user ${user.email}`);
+      console.log(`✅ Usuário criado: ${user.email}`);
     }
   }
 
+  // 2. Semear motoristas (tabela independente)
   for (const driver of driverSeedData) {
-    const [existingCred] = await db
-      .select({ id: driverCredentials.id })
-      .from(driverCredentials)
-      .where(eq(driverCredentials.email, driver.email));
+    const [existing] = await db.select({ id: drivers.id }).from(drivers).where(eq(drivers.email, driver.email));
 
-    if (existingCred) {
+    if (existing) {
       await db
-        .update(driverCredentials)
-        .set({ password, updatedAt: new Date() })
-        .where(eq(driverCredentials.email, driver.email));
-      console.log(`Updated password for driver ${driver.email}`);
+        .update(drivers)
+        .set({ password: driverPassword, updatedAt: new Date() })
+        .where(eq(drivers.email, driver.email));
+      console.log(`🔐 Senha atualizada para motorista ${driver.email}`);
     } else {
-      const [newDriver] = await db.insert(drivers).values({ fullName: driver.fullName }).returning({ id: drivers.id });
-
-      await db.insert(driverCredentials).values({
-        driverId: newDriver.id,
+      await db.insert(drivers).values({
+        fullName: driver.fullName,
         email: driver.email,
-        password,
+        password: driverPassword,
+        status: "APPROVED", // ou "PENDING", como preferir
       });
-      console.log(`Created driver ${driver.email}`);
+      console.log(`✅ Motorista criado: ${driver.email}`);
     }
   }
+
+  console.log("🌱 Seed concluído.");
 }
 
-seedUsers().finally(() => process.exit());
+seed()
+  .catch(console.error)
+  .finally(() => process.exit());

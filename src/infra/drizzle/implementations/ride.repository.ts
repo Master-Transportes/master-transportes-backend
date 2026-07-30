@@ -1,4 +1,4 @@
-import { and, eq, desc, inArray } from "drizzle-orm";
+import { and, eq, desc, inArray, isNull } from "drizzle-orm";
 import { rides, rideLocations } from "../schema";
 import type { RideStatus } from "../schema";
 import { db } from "../drizzle";
@@ -23,7 +23,13 @@ function toRideDetailed(row: {
   startedAt: Date | null;
   completedAt: Date | null;
   cancelledAt: Date | null;
+  price: number | null;
+  distance: number | null;
+  duration: number | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
   createdAt: Date;
+  deletedAt: Date | null;
 }): RideDetailedRow {
   return {
     id: row.id,
@@ -47,7 +53,13 @@ function toRideDetailed(row: {
     startedAt: row.startedAt,
     completedAt: row.completedAt,
     cancelledAt: row.cancelledAt,
+    price: row.price,
+    distance: row.distance,
+    duration: row.duration,
+    cancelledBy: row.cancelledBy,
+    cancelReason: row.cancelReason,
     createdAt: row.createdAt,
+    deletedAt: row.deletedAt,
   };
 }
 
@@ -69,7 +81,13 @@ const SELECT_COLUMNS = {
   startedAt: rides.startedAt,
   completedAt: rides.completedAt,
   cancelledAt: rides.cancelledAt,
+  price: rides.price,
+  distance: rides.distance,
+  duration: rides.duration,
+  cancelledBy: rides.cancelledBy,
+  cancelReason: rides.cancelReason,
   createdAt: rides.createdAt,
+  deletedAt: rides.deletedAt,
 } as const;
 
 export class RideRepository implements IRideRepository {
@@ -78,7 +96,7 @@ export class RideRepository implements IRideRepository {
       .select(SELECT_COLUMNS)
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(eq(rides.id, rideId))
+      .where(and(eq(rides.id, rideId), isNull(rides.deletedAt)))
       .limit(1);
 
     return row ? toRideDetailed(row) : null;
@@ -89,7 +107,7 @@ export class RideRepository implements IRideRepository {
       .select(SELECT_COLUMNS)
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(eq(rides.clientId, clientId))
+      .where(and(eq(rides.clientId, clientId), isNull(rides.deletedAt)))
       .orderBy(desc(rides.createdAt));
 
     return rows.map(toRideDetailed);
@@ -100,7 +118,7 @@ export class RideRepository implements IRideRepository {
       .select(SELECT_COLUMNS)
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(eq(rides.driverId, driverId))
+      .where(and(eq(rides.driverId, driverId), isNull(rides.deletedAt)))
       .orderBy(desc(rides.createdAt));
 
     return rows.map(toRideDetailed);
@@ -110,9 +128,7 @@ export class RideRepository implements IRideRepository {
     const [row] = await db
       .select({ id: rides.id })
       .from(rides)
-      .where(
-        and(eq(rides.clientId, clientId), inArray(rides.status, ACTIVE_RIDE_STATUSES)),
-      )
+      .where(and(eq(rides.clientId, clientId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
       .limit(1);
     return !!row;
   }
@@ -122,9 +138,7 @@ export class RideRepository implements IRideRepository {
       .select(SELECT_COLUMNS)
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(
-        and(eq(rides.driverId, driverId), inArray(rides.status, ACTIVE_RIDE_STATUSES)),
-      )
+      .where(and(eq(rides.driverId, driverId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
       .limit(1);
 
     return row ? toRideDetailed(row) : null;
@@ -132,15 +146,20 @@ export class RideRepository implements IRideRepository {
 
   async findActiveByIdAndClient(rideId: string, clientId: string): Promise<RideActiveRow | null> {
     const [row] = await db
-      .select({ id: rides.id, clientId: rides.clientId, driverId: rides.driverId, status: rides.status })
+      .select({
+        id: rides.id,
+        clientId: rides.clientId,
+        driverId: rides.driverId,
+        status: rides.status,
+        price: rides.price,
+        distance: rides.distance,
+        duration: rides.duration,
+        cancelledBy: rides.cancelledBy,
+        cancelReason: rides.cancelReason,
+        deletedAt: rides.deletedAt,
+      })
       .from(rides)
-      .where(
-        and(
-          eq(rides.id, rideId),
-          eq(rides.clientId, clientId),
-          inArray(rides.status, ACTIVE_RIDE_STATUSES),
-        ),
-      )
+      .where(and(eq(rides.id, rideId), eq(rides.clientId, clientId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
       .limit(1);
 
     return row ?? null;
@@ -151,13 +170,7 @@ export class RideRepository implements IRideRepository {
       .select(SELECT_COLUMNS)
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(
-        and(
-          eq(rides.id, rideId),
-          eq(rides.driverId, driverId),
-          inArray(rides.status, ACTIVE_RIDE_STATUSES),
-        ),
-      )
+      .where(and(eq(rides.id, rideId), eq(rides.driverId, driverId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
       .limit(1);
 
     return row ? toRideDetailed(row) : null;
@@ -177,12 +190,12 @@ export class RideRepository implements IRideRepository {
   async updateToCancelled(rideId: string): Promise<void> {
     await db
       .update(rides)
-      .set({ status: "CANCELLED" as RideStatus, cancelledAt: new Date() })
+      .set({ status: "CANCELLED" as RideStatus, cancelledAt: new Date(), cancelledBy: "system", cancelReason: null })
       .where(eq(rides.id, rideId));
   }
 
   async createRideAndLocation(data: CreateRideData): Promise<void> {
-    await db.transaction(async (tx) => {
+    await db.transaction(async tx => {
       await tx.insert(rides).values({
         id: data.id,
         clientId: data.clientId,

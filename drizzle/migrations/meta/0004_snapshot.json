@@ -1,6 +1,6 @@
 {
-  "id": "2248fcff-3117-41d7-898b-96d0037b9d2d",
-  "prevId": "266032de-668d-429e-8f45-0422a0f75d08",
+  "id": "38efe212-e90c-4837-99fd-cf1a3caee560",
+  "prevId": "d0c2dac5-975d-46c0-9471-81aa9e6b373a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -193,6 +193,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -223,6 +229,21 @@
           ],
           "isUnique": true,
           "where": "\"is_active\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "driver_licenses_cnh_unique": {
+          "name": "driver_licenses_cnh_unique",
+          "columns": [
+            {
+              "expression": "cnh",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -316,6 +337,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -450,6 +477,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -596,6 +629,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -659,34 +698,44 @@
           "method": "btree",
           "with": {}
         },
-        "rides_client_active_idx": {
-          "name": "rides_client_active_idx",
+        "rides_client_id_status_idx": {
+          "name": "rides_client_id_status_idx",
           "columns": [
             {
               "expression": "client_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"status\" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "rides_driver_active_idx": {
-          "name": "rides_driver_active_idx",
-          "columns": [
+            },
             {
-              "expression": "driver_id",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "where": "\"status\" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rides_driver_id_status_idx": {
+          "name": "rides_driver_id_status_idx",
+          "columns": [
+            {
+              "expression": "driver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -788,6 +837,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -919,6 +974,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

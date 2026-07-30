@@ -12,7 +12,7 @@ const PaginationWithSearch = z.object({
 });
 
 export const ListUsersSchema = PaginationWithSearch.extend({
-  role: z.enum(["DRIVER", "CLIENT"]).optional().default("DRIVER"),
+  role: z.enum(["CLIENT"]).optional().default("CLIENT"),
 });
 
 export const ListSystemUsersSchema = PaginationWithSearch;

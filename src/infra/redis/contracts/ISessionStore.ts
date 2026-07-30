@@ -1,8 +1,7 @@
-import type { Role } from "@/infra/drizzle/schema";
 import type { Session } from "@/dto/session.interface";
 
 export interface ISessionStore {
-  create(input: { userId: string; role: Role }): Promise<{ sessionId: string; refreshToken: string }>;
+  create(input: { userId: string; role: string }): Promise<{ sessionId: string; refreshToken: string }>;
   get(sessionId: string): Promise<Session | null>;
   refresh(sessionId: string, oldRefreshToken: string): Promise<{ refreshToken: string; userId: string }>;
   revoke(sessionId: string): Promise<void>;

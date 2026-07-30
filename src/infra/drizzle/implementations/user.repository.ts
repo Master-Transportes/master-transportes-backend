@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { users } from "../schema";
 import { db } from "../drizzle";
 import type {
@@ -21,14 +21,15 @@ export class UserRepository implements IUserRepository {
         banReason: users.banReason,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
+        deletedAt: users.deletedAt,
       })
       .from(users)
-      .where(eq(users.id, id));
+      .where(and(eq(users.id, id), isNull(users.deletedAt)));
     return user ?? null;
   }
 
   async findPasswordById(id: string): Promise<{ id: string; password: string } | null> {
-    const [user] = await db.select({ id: users.id, password: users.password }).from(users).where(eq(users.id, id));
+    const [user] = await db.select({ id: users.id, password: users.password }).from(users).where(and(eq(users.id, id), isNull(users.deletedAt)));
     return user ?? null;
   }
 
@@ -60,6 +61,7 @@ export class UserRepository implements IUserRepository {
       banReason: users.banReason,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
+      deletedAt: users.deletedAt,
     });
     return user ?? null;
   }

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "driver_licenses_cnh_unique" ON "driver_licenses" USING btree ("cnh");

@@ -7,9 +7,9 @@ export class AreaRepository implements IAreaRepository {
   async findByCoordinates(lat: number, lng: number): Promise<AreaRow | null> {
     const [row] = await db
       .select({
-        cdMun: sql<string>`"cdMun"`,
+        cdMun: sql<string>`"cd_mun"`,
         municipality: sql<string>`"municipality"`,
-        abbrevState: sql<string>`"abbrevState"`,
+        abbrevState: sql<string>`"abbrev_state"`,
       })
       .from(areas)
       .where(sql`ST_Contains(geometry, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4674))`)

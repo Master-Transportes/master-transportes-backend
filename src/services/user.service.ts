@@ -21,6 +21,7 @@ import type {
   RequestRideDTO,
 } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
+import type { Role } from "@/infra/drizzle/schema";
 import type { IUserRepository } from "@/infra/drizzle/contracts/IUserRepository";
 import type { ISessionStore } from "@/infra/redis/contracts/ISessionStore";
 import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
@@ -77,14 +78,12 @@ export class UserService {
 
     const user = await this.userRepo.findByEmail(login.toLowerCase());
     if (!user) throw APIError.unauthenticated("E-mail ou senha inválidos.");
-    if (user.role === "DRIVER") throw APIError.unauthenticated("E-mail ou senha inválidos.");
-
     const validPassword = await compare(password, user.password);
     if (!validPassword) throw APIError.unauthenticated("E-mail ou senha inválidos.");
 
     const { sessionId, refreshToken } = await this.sessionStore.create({
       userId: user.id,
-      role: user.role as "DRIVER" | "CLIENT" | "ADMIN" | "EMPLOYEE",
+      role: user.role as Role,
     });
 
     const accessToken = generateToken({ userID: user.id, sessionID: sessionId });
@@ -103,7 +102,6 @@ export class UserService {
       id: user.id,
       fullName: user.fullName,
       email: user.email,
-      role: user.role,
       status: user.status,
       banReason: user.banReason,
     };

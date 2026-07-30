@@ -12,13 +12,13 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
     await redis
       .pipeline()
       .hset(
-        MATCHING_KEYS.DRIVER(driverId),
+        MATCHING_KEYS.DRIVER_LOCATION(driverId),
         "lastLat", latitude.toString(),
         "lastLng", longitude.toString(),
         "cell", cell,
         "lastLocationUpdate", now,
       )
-      .expire(MATCHING_KEYS.DRIVER(driverId), DRIVER_LOCATION_TTL)
+      .expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL)
       .exec();
 
     metrics.incCounter("driver_location_save_total");
@@ -26,7 +26,7 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
 
   async goOnline(driverId: string): Promise<void> {
     const startTime = Date.now();
-    const driver = await redis.hgetall(MATCHING_KEYS.DRIVER(driverId));
+    const driver = await redis.hgetall(MATCHING_KEYS.DRIVER_LOCATION(driverId));
     const lat = driver?.lastLat;
     const lng = driver?.lastLng;
     const cell = driver?.cell;
@@ -40,8 +40,8 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
       .pipeline()
       .geoadd(MATCHING_KEYS.DRIVERS_LOCATION, Number(lng), Number(lat), driverId)
       .sadd(MATCHING_KEYS.DRIVERS_H3(cell), driverId)
-      .hset(MATCHING_KEYS.DRIVER(driverId), "status", "available")
-      .expire(MATCHING_KEYS.DRIVER(driverId), DRIVER_LOCATION_TTL)
+      .hset(MATCHING_KEYS.DRIVER_LOCATION(driverId), "status", "available")
+      .expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL)
       .exec();
 
     metrics.incCounter("driver_go_online_total");
@@ -50,14 +50,14 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
 
   async goOffline(driverId: string): Promise<void> {
     const startTime = Date.now();
-    const cell = await redis.hget(MATCHING_KEYS.DRIVER(driverId), "cell");
+    const cell = await redis.hget(MATCHING_KEYS.DRIVER_LOCATION(driverId), "cell");
 
     const pipeline = redis.pipeline();
     pipeline.zrem(MATCHING_KEYS.DRIVERS_LOCATION, driverId);
     if (cell) {
       pipeline.srem(MATCHING_KEYS.DRIVERS_H3(cell), driverId);
     }
-    pipeline.hset(MATCHING_KEYS.DRIVER(driverId), "status", "offline");
+    pipeline.hset(MATCHING_KEYS.DRIVER_LOCATION(driverId), "status", "offline");
     await pipeline.exec();
 
     metrics.incCounter("driver_go_offline_total");

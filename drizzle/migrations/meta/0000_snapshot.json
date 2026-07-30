@@ -1,11 +1,11 @@
 {
-  "id": "c95efa14-a640-4d4f-bd62-c373410784b3",
+  "id": "45a9c620-4420-47ce-9d42-0a8a5e84acc0",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.Area": {
-      "name": "Area",
+    "public.areas": {
+      "name": "areas",
       "schema": "",
       "columns": {
         "id": {
@@ -21,8 +21,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "abbrevState": {
-          "name": "abbrevState",
+        "abbrev_state": {
+          "name": "abbrev_state",
           "type": "varchar",
           "primaryKey": false,
           "notNull": true
@@ -33,40 +33,40 @@
           "primaryKey": false,
           "notNull": false
         },
-        "cdMun": {
-          "name": "cdMun",
+        "cd_mun": {
+          "name": "cd_mun",
           "type": "varchar",
           "primaryKey": false,
           "notNull": true
         },
-        "cdUf": {
-          "name": "cdUf",
+        "cd_uf": {
+          "name": "cd_uf",
           "type": "varchar",
           "primaryKey": false,
           "notNull": true
         },
-        "nmUf": {
-          "name": "nmUf",
+        "nm_uf": {
+          "name": "nm_uf",
           "type": "varchar",
           "primaryKey": false,
           "notNull": true
         },
-        "cdRegia": {
-          "name": "cdRegia",
+        "cd_regia": {
+          "name": "cd_regia",
           "type": "varchar",
           "primaryKey": false,
           "notNull": true
         },
-        "nmRegia": {
-          "name": "nmRegia",
+        "nm_regia": {
+          "name": "nm_regia",
           "type": "varchar",
           "primaryKey": false,
           "notNull": true
         }
       },
       "indexes": {
-        "Area_municipality_idx": {
-          "name": "Area_municipality_idx",
+        "areas_municipality_idx": {
+          "name": "areas_municipality_idx",
           "columns": [
             {
               "expression": "municipality",
@@ -80,11 +80,11 @@
           "method": "btree",
           "with": {}
         },
-        "Area_abbrevState_idx": {
-          "name": "Area_abbrevState_idx",
+        "areas_abbrev_state_idx": {
+          "name": "areas_abbrev_state_idx",
           "columns": [
             {
-              "expression": "abbrevState",
+              "expression": "abbrev_state",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -95,8 +95,8 @@
           "method": "btree",
           "with": {}
         },
-        "Area_geometry_idx": {
-          "name": "Area_geometry_idx",
+        "areas_geometry_idx": {
+          "name": "areas_geometry_idx",
           "columns": [
             {
               "expression": "geometry",
@@ -118,8 +118,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.Driver": {
-      "name": "Driver",
+    "public.driver_licenses": {
+      "name": "driver_licenses",
       "schema": "",
       "columns": {
         "id": {
@@ -129,8 +129,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "userId": {
-          "name": "userId",
+        "driver_id": {
+          "name": "driver_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -139,13 +139,144 @@
           "name": "cnh",
           "type": "varchar(20)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "cnhCategory": {
-          "name": "cnhCategory",
+        "category": {
+          "name": "category",
           "type": "varchar(5)",
           "primaryKey": false,
+          "notNull": true
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "date",
+          "primaryKey": false,
           "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "is_verified": {
+          "name": "is_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "driver_licenses_driver_id_idx": {
+          "name": "driver_licenses_driver_id_idx",
+          "columns": [
+            {
+              "expression": "driver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "driver_licenses_active_unique": {
+          "name": "driver_licenses_active_unique",
+          "columns": [
+            {
+              "expression": "driver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"is_active\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "driver_licenses_driver_id_drivers_id_fk": {
+          "name": "driver_licenses_driver_id_drivers_id_fk",
+          "tableFrom": "driver_licenses",
+          "tableTo": "drivers",
+          "columnsFrom": [
+            "driver_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.drivers": {
+      "name": "drivers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password": {
+          "name": "password",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
         },
         "status": {
           "name": "status",
@@ -155,27 +286,33 @@
           "notNull": true,
           "default": "'PENDING'"
         },
-        "rejectionReason": {
-          "name": "rejectionReason",
+        "rejection_reason": {
+          "name": "rejection_reason",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false
         },
-        "approvedAt": {
-          "name": "approvedAt",
+        "ban_reason": {
+          "name": "ban_reason",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approved_at": {
+          "name": "approved_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
-        "createdAt": {
-          "name": "createdAt",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -183,8 +320,8 @@
         }
       },
       "indexes": {
-        "Driver_status_idx": {
-          "name": "Driver_status_idx",
+        "drivers_status_idx": {
+          "name": "drivers_status_idx",
           "columns": [
             {
               "expression": "status",
@@ -198,11 +335,11 @@
           "method": "btree",
           "with": {}
         },
-        "Driver_userId_idx": {
-          "name": "Driver_userId_idx",
+        "drivers_created_at_idx": {
+          "name": "drivers_created_at_idx",
           "columns": [
             {
-              "expression": "userId",
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -214,28 +351,14 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "Driver_userId_User_id_fk": {
-          "name": "Driver_userId_User_id_fk",
-          "tableFrom": "Driver",
-          "tableTo": "User",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "Driver_userId_unique": {
-          "name": "Driver_userId_unique",
+        "drivers_email_unique": {
+          "name": "drivers_email_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "userId"
+            "email"
           ]
         }
       },
@@ -243,87 +366,87 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.RideLocation": {
-      "name": "RideLocation",
+    "public.ride_locations": {
+      "name": "ride_locations",
       "schema": "",
       "columns": {
-        "rideId": {
-          "name": "rideId",
+        "ride_id": {
+          "name": "ride_id",
           "type": "uuid",
           "primaryKey": true,
           "notNull": true
         },
-        "originName": {
-          "name": "originName",
+        "origin_name": {
+          "name": "origin_name",
           "type": "varchar(200)",
           "primaryKey": false,
           "notNull": true
         },
-        "originLat": {
-          "name": "originLat",
+        "origin_lat": {
+          "name": "origin_lat",
           "type": "double precision",
           "primaryKey": false,
           "notNull": true
         },
-        "originLng": {
-          "name": "originLng",
+        "origin_lng": {
+          "name": "origin_lng",
           "type": "double precision",
           "primaryKey": false,
           "notNull": true
         },
-        "originH3": {
-          "name": "originH3",
+        "origin_h3": {
+          "name": "origin_h3",
           "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true
         },
-        "destinationName": {
-          "name": "destinationName",
+        "destination_name": {
+          "name": "destination_name",
           "type": "varchar(200)",
           "primaryKey": false,
           "notNull": true
         },
-        "destinationLat": {
-          "name": "destinationLat",
+        "destination_lat": {
+          "name": "destination_lat",
           "type": "double precision",
           "primaryKey": false,
           "notNull": true
         },
-        "destinationLng": {
-          "name": "destinationLng",
+        "destination_lng": {
+          "name": "destination_lng",
           "type": "double precision",
           "primaryKey": false,
           "notNull": true
         },
-        "destinationH3": {
-          "name": "destinationH3",
+        "destination_h3": {
+          "name": "destination_h3",
           "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true
         },
-        "regionId": {
-          "name": "regionId",
+        "region_id": {
+          "name": "region_id",
           "type": "varchar(30)",
           "primaryKey": false,
           "notNull": true,
           "default": "'am-interior'"
         },
-        "municipalityId": {
-          "name": "municipalityId",
+        "municipality_id": {
+          "name": "municipality_id",
           "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true,
           "default": "'unknown'"
         },
-        "createdAt": {
-          "name": "createdAt",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -331,11 +454,11 @@
         }
       },
       "indexes": {
-        "RideLocation_regionId_idx": {
-          "name": "RideLocation_regionId_idx",
+        "ride_locations_region_id_idx": {
+          "name": "ride_locations_region_id_idx",
           "columns": [
             {
-              "expression": "regionId",
+              "expression": "region_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -346,11 +469,11 @@
           "method": "btree",
           "with": {}
         },
-        "RideLocation_municipalityId_idx": {
-          "name": "RideLocation_municipalityId_idx",
+        "ride_locations_municipality_id_idx": {
+          "name": "ride_locations_municipality_id_idx",
           "columns": [
             {
-              "expression": "municipalityId",
+              "expression": "municipality_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -363,17 +486,17 @@
         }
       },
       "foreignKeys": {
-        "RideLocation_rideId_Ride_id_fk": {
-          "name": "RideLocation_rideId_Ride_id_fk",
-          "tableFrom": "RideLocation",
-          "tableTo": "Ride",
+        "ride_locations_ride_id_rides_id_fk": {
+          "name": "ride_locations_ride_id_rides_id_fk",
+          "tableFrom": "ride_locations",
+          "tableTo": "rides",
           "columnsFrom": [
-            "rideId"
+            "ride_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -383,8 +506,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.Ride": {
-      "name": "Ride",
+    "public.rides": {
+      "name": "rides",
       "schema": "",
       "columns": {
         "id": {
@@ -394,14 +517,14 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "clientId": {
-          "name": "clientId",
+        "client_id": {
+          "name": "client_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "driverId": {
-          "name": "driverId",
+        "driver_id": {
+          "name": "driver_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -414,33 +537,33 @@
           "notNull": true,
           "default": "'DRIVER_ASSIGNED'"
         },
-        "startedAt": {
-          "name": "startedAt",
+        "started_at": {
+          "name": "started_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
-        "completedAt": {
-          "name": "completedAt",
+        "completed_at": {
+          "name": "completed_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
-        "cancelledAt": {
-          "name": "cancelledAt",
+        "cancelled_at": {
+          "name": "cancelled_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false
         },
-        "createdAt": {
-          "name": "createdAt",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -448,11 +571,11 @@
         }
       },
       "indexes": {
-        "Ride_clientId_idx": {
-          "name": "Ride_clientId_idx",
+        "rides_client_id_idx": {
+          "name": "rides_client_id_idx",
           "columns": [
             {
-              "expression": "clientId",
+              "expression": "client_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -463,11 +586,11 @@
           "method": "btree",
           "with": {}
         },
-        "Ride_driverId_idx": {
-          "name": "Ride_driverId_idx",
+        "rides_driver_id_idx": {
+          "name": "rides_driver_id_idx",
           "columns": [
             {
-              "expression": "driverId",
+              "expression": "driver_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -478,8 +601,8 @@
           "method": "btree",
           "with": {}
         },
-        "Ride_status_idx": {
-          "name": "Ride_status_idx",
+        "rides_status_idx": {
+          "name": "rides_status_idx",
           "columns": [
             {
               "expression": "status",
@@ -493,11 +616,11 @@
           "method": "btree",
           "with": {}
         },
-        "Ride_createdAt_idx": {
-          "name": "Ride_createdAt_idx",
+        "rides_created_at_idx": {
+          "name": "rides_created_at_idx",
           "columns": [
             {
-              "expression": "createdAt",
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -508,11 +631,11 @@
           "method": "btree",
           "with": {}
         },
-        "Ride_client_active_idx": {
-          "name": "Ride_client_active_idx",
+        "rides_client_active_idx": {
+          "name": "rides_client_active_idx",
           "columns": [
             {
-              "expression": "clientId",
+              "expression": "client_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -524,11 +647,11 @@
           "method": "btree",
           "with": {}
         },
-        "Ride_driver_active_idx": {
-          "name": "Ride_driver_active_idx",
+        "rides_driver_active_idx": {
+          "name": "rides_driver_active_idx",
           "columns": [
             {
-              "expression": "driverId",
+              "expression": "driver_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -542,30 +665,30 @@
         }
       },
       "foreignKeys": {
-        "Ride_clientId_User_id_fk": {
-          "name": "Ride_clientId_User_id_fk",
-          "tableFrom": "Ride",
-          "tableTo": "User",
+        "rides_client_id_users_id_fk": {
+          "name": "rides_client_id_users_id_fk",
+          "tableFrom": "rides",
+          "tableTo": "users",
           "columnsFrom": [
-            "clientId"
+            "client_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "Ride_driverId_User_id_fk": {
-          "name": "Ride_driverId_User_id_fk",
-          "tableFrom": "Ride",
-          "tableTo": "User",
+        "rides_driver_id_drivers_id_fk": {
+          "name": "rides_driver_id_drivers_id_fk",
+          "tableFrom": "rides",
+          "tableTo": "drivers",
           "columnsFrom": [
-            "driverId"
+            "driver_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -575,8 +698,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.User": {
-      "name": "User",
+    "public.users": {
+      "name": "users",
       "schema": "",
       "columns": {
         "id": {
@@ -586,8 +709,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "fullName": {
-          "name": "fullName",
+        "full_name": {
+          "name": "full_name",
           "type": "varchar(120)",
           "primaryKey": false,
           "notNull": true
@@ -620,21 +743,21 @@
           "notNull": true,
           "default": "'ACTIVE'"
         },
-        "banReason": {
-          "name": "banReason",
+        "ban_reason": {
+          "name": "ban_reason",
           "type": "varchar(255)",
           "primaryKey": false,
           "notNull": false
         },
-        "createdAt": {
-          "name": "createdAt",
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -642,8 +765,8 @@
         }
       },
       "indexes": {
-        "User_role_idx": {
-          "name": "User_role_idx",
+        "users_role_idx": {
+          "name": "users_role_idx",
           "columns": [
             {
               "expression": "role",
@@ -657,11 +780,26 @@
           "method": "btree",
           "with": {}
         },
-        "User_createdAt_idx": {
-          "name": "User_createdAt_idx",
+        "users_status_idx": {
+          "name": "users_status_idx",
           "columns": [
             {
-              "expression": "createdAt",
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "users_created_at_idx": {
+          "name": "users_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -676,8 +814,8 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "User_email_unique": {
-          "name": "User_email_unique",
+        "users_email_unique": {
+          "name": "users_email_unique",
           "nullsNotDistinct": false,
           "columns": [
             "email"
@@ -688,8 +826,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.Vehicle": {
-      "name": "Vehicle",
+    "public.vehicles": {
+      "name": "vehicles",
       "schema": "",
       "columns": {
         "id": {
@@ -699,8 +837,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "driverId": {
-          "name": "driverId",
+        "driver_id": {
+          "name": "driver_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -735,15 +873,22 @@
           "primaryKey": false,
           "notNull": true
         },
-        "createdAt": {
-          "name": "createdAt",
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
-        "updatedAt": {
-          "name": "updatedAt",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": true,
@@ -751,11 +896,11 @@
         }
       },
       "indexes": {
-        "Vehicle_driverId_idx": {
-          "name": "Vehicle_driverId_idx",
+        "vehicles_driver_id_idx": {
+          "name": "vehicles_driver_id_idx",
           "columns": [
             {
-              "expression": "driverId",
+              "expression": "driver_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -766,8 +911,8 @@
           "method": "btree",
           "with": {}
         },
-        "Vehicle_plate_idx": {
-          "name": "Vehicle_plate_idx",
+        "vehicles_plate_idx": {
+          "name": "vehicles_plate_idx",
           "columns": [
             {
               "expression": "plate",
@@ -780,27 +925,43 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "vehicles_active_unique": {
+          "name": "vehicles_active_unique",
+          "columns": [
+            {
+              "expression": "driver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"is_active\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
-        "Vehicle_driverId_Driver_id_fk": {
-          "name": "Vehicle_driverId_Driver_id_fk",
-          "tableFrom": "Vehicle",
-          "tableTo": "Driver",
+        "vehicles_driver_id_drivers_id_fk": {
+          "name": "vehicles_driver_id_drivers_id_fk",
+          "tableFrom": "vehicles",
+          "tableTo": "drivers",
           "columnsFrom": [
-            "driverId"
+            "driver_id"
           ],
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "Vehicle_plate_unique": {
-          "name": "Vehicle_plate_unique",
+        "vehicles_plate_unique": {
+          "name": "vehicles_plate_unique",
           "nullsNotDistinct": false,
           "columns": [
             "plate"
@@ -820,7 +981,8 @@
         "PENDING",
         "APPROVED",
         "REJECTED",
-        "SUSPENDED"
+        "SUSPENDED",
+        "BANNED"
       ]
     },
     "public.RideStatus": {
@@ -838,7 +1000,6 @@
       "name": "Role",
       "schema": "public",
       "values": [
-        "DRIVER",
         "CLIENT",
         "ADMIN",
         "EMPLOYEE"

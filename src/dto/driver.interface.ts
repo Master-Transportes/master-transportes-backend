@@ -30,4 +30,6 @@ export interface DriverProfileResponse {
   fullName: string;
   email: string;
   status: DriverStatus;
+  rejectionReason: string | null;
+  banReason: string | null;
 }

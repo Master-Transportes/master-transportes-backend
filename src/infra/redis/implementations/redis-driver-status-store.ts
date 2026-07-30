@@ -7,8 +7,8 @@ export class RedisDriverStatusStore implements IDriverStatusStore {
   async setAvailable(driverId: string): Promise<void> {
     await redis
       .pipeline()
-      .hset(MATCHING_KEYS.DRIVER(driverId), "status", "available")
-      .expire(MATCHING_KEYS.DRIVER(driverId), DRIVER_LOCATION_TTL)
+      .hset(MATCHING_KEYS.DRIVER_LOCATION(driverId), "status", "available")
+      .expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL)
       .exec();
   }
 }

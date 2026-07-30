@@ -4,7 +4,7 @@ export interface CreateUserData {
   fullName: string;
   email: string;
   password: string;
-  role: "CLIENT";
+  role: Role;
 }
 
 export interface UpdateUserData {
@@ -22,6 +22,7 @@ export interface UserRow {
   banReason: string | null;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt: Date | null;
 }
 
 export interface UserPasswordRow {

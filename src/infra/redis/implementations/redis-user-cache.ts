@@ -40,10 +40,7 @@ export class RedisUserCache implements IUserCache {
 
   async invalidate(userId: string): Promise<void> {
     const startTime = Date.now();
-    await Promise.all([
-      redis.del(CACHE_KEYS.USER(userId)),
-      redis.del(CACHE_KEYS.USER_BASE(userId)),
-    ]);
+    await Promise.all([redis.del(CACHE_KEYS.USER(userId)), redis.del(CACHE_KEYS.USER_BASE(userId))]);
     metrics.incCounter("user_cache_invalidate_total");
     metrics.observeHistogram("user_cache_operation_duration_ms", Date.now() - startTime);
   }

@@ -1,12 +1,9 @@
-import { eq, desc, inArray, sql, and, or, ilike } from "drizzle-orm";
+import { eq, desc, inArray, sql, and, ilike, isNull } from "drizzle-orm";
 import { users } from "../schema";
 import type { Role } from "../schema";
-import type {
-  PaginatedUsersResponse,
-  DashboardActionResponse,
-} from "@/dto/dashboard.interface";
+import type { PaginatedUsersResponse, DashboardActionResponse } from "@/dto/dashboard.interface";
 import { db } from "../drizzle";
-import type { IUserReadRepository } from "../contracts/IUserReadRepository";
+import type { IUserAdminRepository, ListUsersData, ListSystemUsersData } from "../contracts/IUserAdminRepository";
 
 const LIST_COLUMNS = {
   id: users.id,
@@ -21,39 +18,23 @@ const LIST_COLUMNS = {
 
 const SYSTEM_ROLES: Role[] = ["ADMIN", "EMPLOYEE"];
 
-interface ListUsersData {
-  role: "DRIVER" | "CLIENT";
-  page: number;
-  limit: number;
-  search: string;
-  status?: "ACTIVE" | "BANNED" | "INACTIVE";
-}
-
-interface ListSystemUsersData {
-  page: number;
-  limit: number;
-  search: string;
-  status?: "ACTIVE" | "BANNED" | "INACTIVE";
-}
-
-export class UserReadRepository implements IUserReadRepository {
+export class UserAdminRepository implements IUserAdminRepository {
   async listUsers(data: ListUsersData): Promise<PaginatedUsersResponse> {
     const offset = (data.page - 1) * data.limit;
 
     const where = and(
       eq(users.role, data.role),
       data.status ? eq(users.status, data.status) : undefined,
-      data.search
-        ? or(
-            ilike(users.fullName, `%${data.search}%`),
-            ilike(users.email, `%${data.search}%`),
-          )
-        : undefined,
+      data.search ? ilike(users.fullName, `%${data.search}%`) : undefined,
+      isNull(users.deletedAt),
     );
 
     const [result, countResult] = await Promise.all([
       db.select(LIST_COLUMNS).from(users).where(where).orderBy(desc(users.createdAt)).limit(data.limit).offset(offset),
-      db.select({ count: sql<number>`count(*)` }).from(users).where(where),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(where),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
@@ -73,17 +54,16 @@ export class UserReadRepository implements IUserReadRepository {
     const where = and(
       inArray(users.role, SYSTEM_ROLES),
       data.status ? eq(users.status, data.status) : undefined,
-      data.search
-        ? or(
-            ilike(users.fullName, `%${data.search}%`),
-            ilike(users.email, `%${data.search}%`),
-          )
-        : undefined,
+      data.search ? ilike(users.fullName, `%${data.search}%`) : undefined,
+      isNull(users.deletedAt),
     );
 
     const [result, countResult] = await Promise.all([
       db.select(LIST_COLUMNS).from(users).where(where).orderBy(desc(users.createdAt)).limit(data.limit).offset(offset),
-      db.select({ count: sql<number>`count(*)` }).from(users).where(where),
+      db
+        .select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(where),
     ]);
 
     const total = Number(countResult[0]?.count ?? 0);
@@ -126,4 +106,4 @@ export class UserReadRepository implements IUserReadRepository {
   }
 }
 
-export const userReadRepository = new UserReadRepository();
+export const userAdminRepository = new UserAdminRepository();

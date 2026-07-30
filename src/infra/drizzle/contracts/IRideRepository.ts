@@ -26,7 +26,13 @@ export interface RideDetailedRow {
   startedAt: Date | null;
   completedAt: Date | null;
   cancelledAt: Date | null;
+  price: number | null;
+  distance: number | null;
+  duration: number | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
   createdAt: Date;
+  deletedAt: Date | null;
 }
 
 export interface CreateRideData {
@@ -51,6 +57,12 @@ export interface RideActiveRow {
   clientId: string;
   driverId: string;
   status: RideStatus;
+  price: number | null;
+  distance: number | null;
+  duration: number | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  deletedAt: Date | null;
 }
 
 export interface IRideRepository {

@@ -367,7 +367,6 @@ describe("AccessService", () => {
         id: testUserId,
         fullName: "Access Test Suite User",
         email: testUserEmail,
-        role: "CLIENT",
         status: "ACTIVE",
         banReason: null,
       });
