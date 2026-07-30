@@ -1,5 +1,5 @@
-import type { RideDetailedRow } from "@/infra/postgres/contracts/IRideRepository";
-import type { DriverStatus } from "@/infra/db/schema";
+import type { RideDetailedRow } from "@/infra/drizzle/contracts/IRideRepository";
+import type { DriverStatus } from "@/infra/drizzle/schema";
 
 export interface UpdateDriverLocationDTO {
   latitude: number;

@@ -8,8 +8,8 @@ import type {
 } from "@/dto/dashboard.interface";
 import { validateOrThrow } from "@/validations/schema-validator";
 import { BanUserSchema, ListUsersSchema, ListSystemUsersSchema } from "@/validations/dto/dashboard.validate";
-import type { IUserReadRepository, ListUsersData, ListSystemUsersData } from "@/infra/postgres/contracts/IUserReadRepository";
-import { userReadRepository } from "@/infra/postgres";
+import type { IUserReadRepository, ListUsersData, ListSystemUsersData } from "@/infra/drizzle/contracts/IUserReadRepository";
+import { userReadRepository } from "@/infra/drizzle";
 
 export class DashboardService {
   constructor(private readonly userReadRepo: IUserReadRepository) {}

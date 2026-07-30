@@ -1,12 +1,12 @@
 import { APIError, middleware } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { userCache } from "@/infra/redis";
-import { userRepository } from "@/infra/postgres";
-import type { UserStatus } from "@/infra/db/schema";
+import { userRepository } from "@/infra/drizzle";
+import type { UserStatus, Role } from "@/infra/drizzle/schema";
 
 export interface RoleCacheDTO {
   id: string;
-  role: "DRIVER" | "CLIENT" | "ADMIN" | "EMPLOYEE";
+  role: Role;
   status: UserStatus;
 }
 

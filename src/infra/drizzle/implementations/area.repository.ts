@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { areas } from "@/infra/db/schema";
-import { db } from "@/infra/db/drizzle";
-import type { IAreaRepository, AreaRow } from "@/infra/postgres/contracts/IAreaRepository";
+import { areas } from "../schema";
+import { db } from "../drizzle";
+import type { IAreaRepository, AreaRow } from "../contracts/IAreaRepository";
 
 export class AreaRepository implements IAreaRepository {
   async findByCoordinates(lat: number, lng: number): Promise<AreaRow | null> {

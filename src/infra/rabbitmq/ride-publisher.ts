@@ -1,56 +1,21 @@
-import "dotenv/config";
-import { connect, type Channel, type ChannelModel } from "amqplib";
+import type { IRideEventPublisher } from "@/infra/rabbitmq/contracts/IRideEventPublisher";
+import { ensureChannel } from "./connection";
 
 const EXCHANGE = "ride.exchange";
-const ROUTING_KEY = "ride.requested";
 
-let channel: Channel | null = null;
+export const rideEventPublisher: IRideEventPublisher = {
+  async publishRideRequested(data) {
+    const ch = await ensureChannel(EXCHANGE);
+    return ch.publish(EXCHANGE, "ride.requested", Buffer.from(JSON.stringify(data)), { persistent: true });
+  },
 
-async function ensureChannel(): Promise<Channel> {
-  if (channel) return channel;
-  const url = process.env.RABBITMQ_URL ?? "amqp://guest:guest@localhost:5672";
-  const conn: ChannelModel = await connect(url);
-  channel = await conn.createChannel();
-  await channel.assertExchange(EXCHANGE, "topic", { durable: true });
-  conn.on("close", () => {
-    channel = null;
-  });
-  return channel;
-}
+  async publishOfferAccepted(data) {
+    const ch = await ensureChannel(EXCHANGE);
+    return ch.publish(EXCHANGE, "ride.offer.accepted", Buffer.from(JSON.stringify(data)), { persistent: true });
+  },
 
-export async function publishRideRequested(message: {
-  rideId: string;
-  passengerId: string;
-  pickupLat: number;
-  pickupLng: number;
-  dropoffLat: number;
-  dropoffLng: number;
-  originName: string;
-  destinationName: string;
-  timestamp: string;
-}): Promise<boolean> {
-  const ch = await ensureChannel();
-  const data = Buffer.from(JSON.stringify(message));
-  return ch.publish(EXCHANGE, ROUTING_KEY, data, { persistent: true });
-}
-
-export async function publishRideCancelled(message: {
-  rideId: string;
-  passengerId: string;
-  timestamp: string;
-}): Promise<boolean> {
-  const ch = await ensureChannel();
-  const data = Buffer.from(JSON.stringify(message));
-  return ch.publish(EXCHANGE, "ride.cancelled", data, { persistent: true });
-}
-
-export async function publishOfferAccepted(message: {
-  rideId: string;
-  offerId: string;
-  driverId: string;
-  timestamp: string;
-}): Promise<boolean> {
-  const ch = await ensureChannel();
-  const data = Buffer.from(JSON.stringify(message));
-  return ch.publish(EXCHANGE, "ride.offer.accepted", data, { persistent: true });
-}
+  async publishRideCancelled(data) {
+    const ch = await ensureChannel(EXCHANGE);
+    return ch.publish(EXCHANGE, "ride.cancelled", Buffer.from(JSON.stringify(data)), { persistent: true });
+  },
+};

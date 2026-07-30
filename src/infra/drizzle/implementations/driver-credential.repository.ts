@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
-import { driverCredentials } from "@/infra/db/schema";
-import { db } from "@/infra/db/drizzle";
-import type { IDriverCredentialRepository, DriverCredentialRow, CreateDriverCredentialData } from "@/infra/postgres/contracts/IDriverCredentialRepository";
+import { driverCredentials } from "../schema";
+import { db } from "../drizzle";
+import type { IDriverCredentialRepository, DriverCredentialRow, CreateDriverCredentialData } from "../contracts/IDriverCredentialRepository";
 
 export class DriverCredentialRepository implements IDriverCredentialRepository {
   async findByEmail(email: string): Promise<DriverCredentialRow | null> {

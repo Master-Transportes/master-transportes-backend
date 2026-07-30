@@ -1,12 +1,12 @@
 import { eq, desc, inArray, sql, and, or, ilike } from "drizzle-orm";
-import { users } from "@/infra/db/schema";
-import type { Role } from "@/infra/db/schema";
+import { users } from "../schema";
+import type { Role } from "../schema";
 import type {
   PaginatedUsersResponse,
   DashboardActionResponse,
 } from "@/dto/dashboard.interface";
-import { db } from "@/infra/db/drizzle";
-import type { IUserReadRepository } from "@/infra/postgres/contracts/IUserReadRepository";
+import { db } from "../drizzle";
+import type { IUserReadRepository } from "../contracts/IUserReadRepository";
 
 const LIST_COLUMNS = {
   id: users.id,

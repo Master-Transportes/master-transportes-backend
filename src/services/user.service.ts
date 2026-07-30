@@ -21,16 +21,16 @@ import type {
   RequestRideDTO,
 } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
-import type { IUserRepository } from "@/infra/postgres/contracts/IUserRepository";
+import type { IUserRepository } from "@/infra/drizzle/contracts/IUserRepository";
 import type { ISessionStore } from "@/infra/redis/contracts/ISessionStore";
 import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
-import type { IRideRepository } from "@/infra/postgres/contracts/IRideRepository";
+import type { IRideRepository } from "@/infra/drizzle/contracts/IRideRepository";
 import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStore";
 import type { IDriverStatusStore } from "@/infra/redis/contracts/IDriverStatusStore";
 import type { IRideEventPublisher } from "@/infra/rabbitmq/contracts/IRideEventPublisher";
 import type { ProfileService } from "@/services/profile.service";
-import { userRepository } from "@/infra/postgres";
-import { rideRepository } from "@/infra/postgres";
+import { userRepository } from "@/infra/drizzle";
+import { rideRepository } from "@/infra/drizzle";
 import { rideRequestStore } from "@/infra/redis";
 import { driverStatusStore } from "@/infra/redis";
 import { rideEventPublisher } from "@/infra/rabbitmq";
@@ -148,11 +148,11 @@ export class UserService {
   }
 
   async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {
-    return this.profileService_.updateProfile(userID, payload, UpdateProfileSchema);
+    return this.profileService_.updateProfile(userID, payload);
   }
 
   async changePassword(userID: string, payload: ChangePasswordDTO): Promise<void> {
-    return this.profileService_.changePassword(userID, payload, ChangePasswordSchema);
+    return this.profileService_.changePassword(userID, payload);
   }
 
   async requestRide(passengerId: string, payload: RequestRideDTO): Promise<RequestRideResponse> {

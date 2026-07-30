@@ -2,17 +2,14 @@ import { describe, beforeAll, afterAll, beforeEach, afterEach, expect, it } from
 import { APIError } from "encore.dev/api";
 import { hashSync } from "bcrypt";
 import { eq, like } from "drizzle-orm";
-import { RedisSessionStore } from "@/infra/redis/implementations/redis-session-store";
-import { redis } from "@/infra/redis";
-import { db } from "@/infra/db/drizzle";
-import { users } from "@/infra/db/schema";
+import { sessionStore, redis } from "@/infra/redis";
+import { db } from "@/infra/drizzle/drizzle";
+import { users } from "@/infra/drizzle/schema";
 import { CACHE_KEYS } from "@/infra/redis";
 
 const TEST_PREFIX = `session-test-${Date.now()}`;
 let testUserId: string;
 let testUserEmail: string;
-
-const sessionStore = new RedisSessionStore();
 
 describe("RedisSessionStore", () => {
   let createdSessionIds: string[] = [];

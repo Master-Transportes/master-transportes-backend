@@ -1,7 +1,13 @@
 import { eq } from "drizzle-orm";
-import { users } from "@/infra/db/schema";
-import { db } from "@/infra/db/drizzle";
-import type { IUserRepository, UserRow, UserPasswordRow, CreateUserData, UpdateUserData } from "@/infra/postgres/contracts/IUserRepository";
+import { users } from "../schema";
+import { db } from "../drizzle";
+import type {
+  IUserRepository,
+  UserRow,
+  UserPasswordRow,
+  CreateUserData,
+  UpdateUserData,
+} from "../contracts/IUserRepository";
 
 export class UserRepository implements IUserRepository {
   async findById(id: string): Promise<UserRow | null> {
@@ -22,10 +28,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async findPasswordById(id: string): Promise<{ id: string; password: string } | null> {
-    const [user] = await db
-      .select({ id: users.id, password: users.password })
-      .from(users)
-      .where(eq(users.id, id));
+    const [user] = await db.select({ id: users.id, password: users.password }).from(users).where(eq(users.id, id));
     return user ?? null;
   }
 
@@ -48,20 +51,16 @@ export class UserRepository implements IUserRepository {
   }
 
   async update(id: string, data: UpdateUserData): Promise<UserRow | null> {
-    const [user] = await db
-      .update(users)
-      .set(data)
-      .where(eq(users.id, id))
-      .returning({
-        id: users.id,
-        fullName: users.fullName,
-        email: users.email,
-        role: users.role,
-        status: users.status,
-        banReason: users.banReason,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      });
+    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning({
+      id: users.id,
+      fullName: users.fullName,
+      email: users.email,
+      role: users.role,
+      status: users.status,
+      banReason: users.banReason,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    });
     return user ?? null;
   }
 
@@ -71,4 +70,3 @@ export class UserRepository implements IUserRepository {
 }
 
 export const userRepository = new UserRepository();
-export type { UserRow, UserPasswordRow, CreateUserData, UpdateUserData };

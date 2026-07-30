@@ -1,18 +1,17 @@
 import "dotenv/config";
-import { connect, type Channel, type ChannelModel, type ConsumeMessage } from "amqplib";
+import { type ConsumeMessage } from "amqplib";
 import { z } from "zod";
 import { latLngToCell } from "h3-js";
 import { H3_RESOLUTION } from "@/infra/redis/keys-cache";
-import { rideRepository } from "@/infra/postgres";
+import { rideRepository } from "@/infra/drizzle";
 import { areaService } from "@/services/area.service";
 import { logger } from "@/infra/observability/logger";
-import type { CreateRideData } from "@/infra/postgres/contracts/IRideRepository";
+import { ensureChannel } from "@/infra/rabbitmq/connection";
+import type { CreateRideData } from "@/infra/drizzle/contracts/IRideRepository";
 
 const EXCHANGE = "ride.exchange";
 const QUEUE = "api.ride.driver.accepted";
 const ROUTING_KEY = "ride.driver.accepted";
-
-let channel: Channel | null = null;
 
 const schema = z.object({
   rideId: z.string().uuid(),
@@ -26,18 +25,6 @@ const schema = z.object({
   destinationName: z.string(),
   timestamp: z.string(),
 });
-
-async function ensureChannel(): Promise<Channel> {
-  if (channel) return channel;
-  const url = process.env.RABBITMQ_URL ?? "amqp://guest:guest@localhost:5672";
-  const conn: ChannelModel = await connect(url);
-  channel = await conn.createChannel();
-  await channel.assertExchange(EXCHANGE, "topic", { durable: true });
-  await channel.assertQueue(QUEUE, { durable: true });
-  await channel.bindQueue(QUEUE, EXCHANGE, ROUTING_KEY);
-  conn.on("close", () => { channel = null; });
-  return channel;
-}
 
 async function handleMessage(msg: ConsumeMessage): Promise<void> {
   const event = schema.parse(JSON.parse(msg.content.toString()));
@@ -75,7 +62,7 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
 }
 
 export async function startConsumer(): Promise<void> {
-  const ch = await ensureChannel();
+  const ch = await ensureChannel(EXCHANGE, QUEUE, ROUTING_KEY);
   await ch.prefetch(1);
   await ch.consume(QUEUE, async (msg) => {
     if (!msg) return;

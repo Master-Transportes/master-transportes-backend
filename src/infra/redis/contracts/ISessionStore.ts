@@ -1,4 +1,4 @@
-import type { Role } from "@/infra/db/schema";
+import type { Role } from "@/infra/drizzle/schema";
 import type { Session } from "@/dto/session.interface";
 
 export interface ISessionStore {

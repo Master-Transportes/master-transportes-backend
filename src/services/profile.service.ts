@@ -1,13 +1,13 @@
 import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
-import type { IUserRepository, UserRow } from "@/infra/postgres/contracts/IUserRepository";
+import { UpdateProfileSchema, ChangePasswordSchema } from "@/validations/dto/user.validate";
+import type { IUserRepository, UserRow } from "@/infra/drizzle/contracts/IUserRepository";
 import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
 import type { UserProfileResponse, UpdateProfileDTO, ChangePasswordDTO } from "@/dto/user.interface";
-import { userRepository } from "@/infra/postgres";
+import { userRepository } from "@/infra/drizzle";
 import { userCache } from "@/infra/redis";
 import { isPgUniqueViolation } from "@/constants/database";
-import type { ZodObject, ZodRawShape } from "zod";
 
 function toProfile(user: UserRow): UserProfileResponse {
   return {
@@ -33,12 +33,8 @@ export class ProfileService {
     return toProfile(user);
   }
 
-  async updateProfile(
-    userID: string,
-    payload: UpdateProfileDTO,
-    schema: ZodObject<ZodRawShape>,
-  ): Promise<UserProfileResponse> {
-    const validated = validateOrThrow(schema, payload as unknown as Record<string, unknown>) as { fullName: string; email?: string };
+  async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {
+    const validated = validateOrThrow(UpdateProfileSchema, payload);
 
     try {
       const user = await this.userRepo.update(userID, {
@@ -62,12 +58,8 @@ export class ProfileService {
     }
   }
 
-  async changePassword(
-    userID: string,
-    payload: ChangePasswordDTO,
-    schema: ZodObject<ZodRawShape>,
-  ): Promise<void> {
-    const validated = validateOrThrow(schema, payload as unknown as Record<string, unknown>) as { currentPassword: string; newPassword: string };
+  async changePassword(userID: string, payload: ChangePasswordDTO): Promise<void> {
+    const validated = validateOrThrow(ChangePasswordSchema, payload);
 
     const user = await this.userRepo.findPasswordById(userID);
     if (!user) {

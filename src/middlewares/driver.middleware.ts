@@ -1,5 +1,5 @@
 import { createRoleMiddleware } from "./role.middleware";
-import { driverRepository } from "@/infra/postgres";
+import { driverRepository } from "@/infra/drizzle";
 
 export const DriverMiddleware = createRoleMiddleware({
   role: "DRIVER",

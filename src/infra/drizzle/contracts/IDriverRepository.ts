@@ -1,4 +1,4 @@
-import type { DriverStatus } from "@/infra/db/schema";
+import type { DriverStatus } from "@/infra/drizzle/schema";
 
 export interface CreateDriverData {
   fullName: string;

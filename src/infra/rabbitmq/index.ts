@@ -1,1 +1,1 @@
-export { rideEventPublisher } from "./implementations/rabbit-ride-event-publisher";
+export { rideEventPublisher } from "./ride-publisher";

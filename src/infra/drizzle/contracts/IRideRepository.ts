@@ -1,4 +1,4 @@
-import type { RideStatus } from "@/infra/db/schema";
+import type { RideStatus } from "@/infra/drizzle/schema";
 
 export interface PickupLocation {
   name: string;

@@ -1,7 +1,7 @@
 import { hash } from "bcrypt";
 import { eq } from "drizzle-orm";
-import { db } from "@/infra/db/drizzle";
-import { users, drivers, driverCredentials } from "@/infra/db/schema";
+import { db } from "@/infra/drizzle/drizzle";
+import { users, drivers, driverCredentials } from "@/infra/drizzle/schema";
 
 const userSeedData = [
   { fullName: "Enderson User da Silva", email: "user@admin.com", role: "CLIENT" as const },
