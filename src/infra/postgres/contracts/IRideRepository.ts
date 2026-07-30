@@ -1,4 +1,4 @@
-import type { RideStatus } from "@/interfaces/user-types";
+import type { RideStatus } from "@/infra/db/schema";
 
 export interface PickupLocation {
   name: string;

@@ -2,7 +2,7 @@ import { APIError, middleware } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { userCache } from "@/infra/redis";
 import { userRepository } from "@/infra/postgres";
-import type { UserStatus } from "@/interfaces/user-types";
+import type { UserStatus } from "@/infra/db/schema";
 
 export interface RoleCacheDTO {
   id: string;
@@ -24,10 +24,14 @@ export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
   middleware({ target: { auth: true } }, async (req, next) => {
     const { userID } = auth.getAuthData()!;
 
-    const lookup = options.lookupFn ?? ((id: string) => userRepository.findById(id).then(u => u ? { role: u.role, status: u.status } : null));
+    const lookup =
+      options.lookupFn ??
+      ((id: string) => userRepository.findById(id).then(u => (u ? { role: u.role, status: u.status } : null)));
 
     const cached = await userCache.getBase(userID);
-    let user: RoleCacheDTO | null = cached ? { id: userID, role: cached.role as RoleCacheDTO["role"], status: cached.status as UserStatus } : null;
+    let user: RoleCacheDTO | null = cached
+      ? { id: userID, role: cached.role as RoleCacheDTO["role"], status: cached.status as UserStatus }
+      : null;
 
     if (!user) {
       const dbUser = await lookup(userID);

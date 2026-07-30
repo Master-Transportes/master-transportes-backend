@@ -1,4 +1,3 @@
-import type { Role, UserStatus } from "@/interfaces/user-types";
 import type { Role, UserStatus } from "@/infra/db/schema";
 
 export interface SignInDTO {

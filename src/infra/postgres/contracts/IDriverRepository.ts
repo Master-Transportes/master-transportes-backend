@@ -1,4 +1,4 @@
-import type { DriverStatus } from "@/interfaces/user-types";
+import type { DriverStatus } from "@/infra/db/schema";
 
 export interface CreateDriverData {
   fullName: string;

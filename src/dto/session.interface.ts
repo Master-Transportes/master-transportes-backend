@@ -1,4 +1,4 @@
-import type { Role } from "@/interfaces/user-types";
+import type { Role } from "@/infra/db/schema";
 
 export interface Session {
   sessionId: string;

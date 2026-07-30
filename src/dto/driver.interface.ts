@@ -1,5 +1,5 @@
 import type { RideDetailedRow } from "@/infra/postgres/contracts/IRideRepository";
-import type { DriverStatus } from "@/interfaces/user-types";
+import type { DriverStatus } from "@/infra/db/schema";
 
 export interface UpdateDriverLocationDTO {
   latitude: number;
