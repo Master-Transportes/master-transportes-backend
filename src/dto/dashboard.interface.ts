@@ -1,4 +1,4 @@
-import type { Role, UserStatus } from "@/infra/drizzle/schema";
+import type { Role, UserStatus } from "./shared.types.ts";
 
 export interface DashboardUserItem {
   id: string;

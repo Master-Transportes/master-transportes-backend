@@ -79,12 +79,10 @@ async function readGeoJSONFile(path: string) {
       // Converte para WKT
       const wkt = geoJSONToWKT(feature.geometry);
 
-      // Gera um ID (já que o schema tem @default(cuid()), mas vamos passar explicitamente)
       const id = randomUUID();
 
-      // INSERE TODOS OS CAMPOS - CORRIGIDO!
       await db.execute(
-        sql`INSERT INTO "Area" (id, municipality, "abbrevState", geometry, "cdMun", "cdUf", "nmUf", "cdRegia", "nmRegia") VALUES (${id}, ${props.NM_MUN}, ${props.SIGLA_UF}, ST_GeomFromText(${wkt}, 4674), ${props.CD_MUN}, ${props.CD_UF}, ${props.NM_UF}, ${props.CD_REGIA}, ${props.NM_REGIA})`,
+        sql`INSERT INTO "areas" (id, municipality, "abbrev_state", geometry, "cd_mun", "cd_uf", "nm_uf", "cd_regia", "nm_regia") VALUES (${id}, ${props.NM_MUN}, ${props.SIGLA_UF}, ST_GeomFromText(${wkt}, 4674), ${props.CD_MUN}, ${props.CD_UF}, ${props.NM_UF}, ${props.CD_REGIA}, ${props.NM_REGIA})`,
       );
 
       insertedCount++;

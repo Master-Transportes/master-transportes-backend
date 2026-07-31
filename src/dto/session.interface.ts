@@ -1,4 +1,4 @@
-import type { Role } from "@/infra/drizzle/schema";
+import type { Role } from "./shared.types.ts";
 
 export interface Session {
   sessionId: string;

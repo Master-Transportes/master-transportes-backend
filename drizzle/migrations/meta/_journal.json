@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1785442064974,
-      "tag": "0000_init_db",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1785442386187,
-      "tag": "0001_add_price_distance_duration_cancelled_fields_to_rides",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1785443265624,
-      "tag": "0002_replace_enums_with_varchar_check",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1785443754262,
-      "tag": "0003_add_soft_delete_and_composite_indexes",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1785444761530,
-      "tag": "0004_add_cnh_unique_index",
+      "when": 1785467958216,
+      "tag": "0000_init",
       "breakpoints": true
     }
   ]

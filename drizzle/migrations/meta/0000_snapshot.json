@@ -1,5 +1,5 @@
 {
-  "id": "45a9c620-4420-47ce-9d42-0a8a5e84acc0",
+  "id": "ddf3c2e0-303d-40d3-8a14-84df2a0dce5a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -193,6 +193,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -223,6 +229,21 @@
           ],
           "isUnique": true,
           "where": "\"is_active\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "driver_licenses_cnh_unique": {
+          "name": "driver_licenses_cnh_unique",
+          "columns": [
+            {
+              "expression": "cnh",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -280,8 +301,7 @@
         },
         "status": {
           "name": "status",
-          "type": "DriverStatus",
-          "typeSchema": "public",
+          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true,
           "default": "'PENDING'"
@@ -317,6 +337,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -451,6 +477,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -531,8 +563,7 @@
         },
         "status": {
           "name": "status",
-          "type": "RideStatus",
-          "typeSchema": "public",
+          "type": "varchar(30)",
           "primaryKey": false,
           "notNull": true,
           "default": "'DRIVER_ASSIGNED'"
@@ -555,6 +586,36 @@
           "primaryKey": false,
           "notNull": false
         },
+        "price": {
+          "name": "price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "distance": {
+          "name": "distance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration": {
+          "name": "duration",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancelled_by": {
+          "name": "cancelled_by",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancel_reason": {
+          "name": "cancel_reason",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -568,6 +629,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -631,34 +698,44 @@
           "method": "btree",
           "with": {}
         },
-        "rides_client_active_idx": {
-          "name": "rides_client_active_idx",
+        "rides_client_id_status_idx": {
+          "name": "rides_client_id_status_idx",
           "columns": [
             {
               "expression": "client_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"status\" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "rides_driver_active_idx": {
-          "name": "rides_driver_active_idx",
-          "columns": [
+            },
             {
-              "expression": "driver_id",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "where": "\"status\" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rides_driver_id_status_idx": {
+          "name": "rides_driver_id_status_idx",
+          "columns": [
+            {
+              "expression": "driver_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -729,16 +806,14 @@
         },
         "role": {
           "name": "role",
-          "type": "Role",
-          "typeSchema": "public",
+          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true,
           "default": "'CLIENT'"
         },
         "status": {
           "name": "status",
-          "type": "UserStatus",
-          "typeSchema": "public",
+          "type": "varchar(20)",
           "primaryKey": false,
           "notNull": true,
           "default": "'ACTIVE'"
@@ -762,6 +837,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -893,6 +974,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -973,48 +1060,7 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {
-    "public.DriverStatus": {
-      "name": "DriverStatus",
-      "schema": "public",
-      "values": [
-        "PENDING",
-        "APPROVED",
-        "REJECTED",
-        "SUSPENDED",
-        "BANNED"
-      ]
-    },
-    "public.RideStatus": {
-      "name": "RideStatus",
-      "schema": "public",
-      "values": [
-        "DRIVER_ASSIGNED",
-        "DRIVER_ARRIVING",
-        "IN_PROGRESS",
-        "COMPLETED",
-        "CANCELLED"
-      ]
-    },
-    "public.Role": {
-      "name": "Role",
-      "schema": "public",
-      "values": [
-        "CLIENT",
-        "ADMIN",
-        "EMPLOYEE"
-      ]
-    },
-    "public.UserStatus": {
-      "name": "UserStatus",
-      "schema": "public",
-      "values": [
-        "ACTIVE",
-        "BANNED",
-        "INACTIVE"
-      ]
-    }
-  },
+  "enums": {},
   "schemas": {},
   "sequences": {},
   "roles": {},

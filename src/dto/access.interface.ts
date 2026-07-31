@@ -1,4 +1,4 @@
-import type { UserStatus } from "@/infra/drizzle/schema";
+import type { UserStatus } from "./shared.types.ts";
 
 export interface SignInDTO {
   login: string;

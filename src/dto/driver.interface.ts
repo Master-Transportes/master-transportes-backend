@@ -1,5 +1,5 @@
 import type { RideDetailedRow } from "@/infra/drizzle/contracts/IRideRepository";
-import type { DriverStatus } from "@/infra/drizzle/schema";
+import type { DriverStatus } from "./shared.types.ts";
 
 export interface UpdateDriverLocationDTO {
   latitude: number;

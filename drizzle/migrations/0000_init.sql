@@ -1,7 +1,3 @@
-CREATE TYPE "public"."DriverStatus" AS ENUM('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED', 'BANNED');--> statement-breakpoint
-CREATE TYPE "public"."RideStatus" AS ENUM('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED');--> statement-breakpoint
-CREATE TYPE "public"."Role" AS ENUM('CLIENT', 'ADMIN', 'EMPLOYEE');--> statement-breakpoint
-CREATE TYPE "public"."UserStatus" AS ENUM('ACTIVE', 'BANNED', 'INACTIVE');--> statement-breakpoint
 CREATE TABLE "areas" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"municipality" varchar NOT NULL,
@@ -25,7 +21,8 @@ CREATE TABLE "driver_licenses" (
 	"is_verified" boolean DEFAULT false,
 	"verified_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE "drivers" (
@@ -33,12 +30,13 @@ CREATE TABLE "drivers" (
 	"full_name" varchar(120) NOT NULL,
 	"email" varchar(255) NOT NULL,
 	"password" varchar NOT NULL,
-	"status" "DriverStatus" DEFAULT 'PENDING' NOT NULL,
+	"status" varchar(20) DEFAULT 'PENDING' NOT NULL,
 	"rejection_reason" varchar(255),
 	"ban_reason" varchar(255),
 	"approved_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamp,
 	CONSTRAINT "drivers_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -55,19 +53,26 @@ CREATE TABLE "ride_locations" (
 	"region_id" varchar(30) DEFAULT 'am-interior' NOT NULL,
 	"municipality_id" varchar(20) DEFAULT 'unknown' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE "rides" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"client_id" uuid NOT NULL,
 	"driver_id" uuid NOT NULL,
-	"status" "RideStatus" DEFAULT 'DRIVER_ASSIGNED' NOT NULL,
+	"status" varchar(30) DEFAULT 'DRIVER_ASSIGNED' NOT NULL,
 	"started_at" timestamp,
 	"completed_at" timestamp,
 	"cancelled_at" timestamp,
+	"price" integer,
+	"distance" integer,
+	"duration" integer,
+	"cancelled_by" varchar(20),
+	"cancel_reason" varchar(255),
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
@@ -75,11 +80,12 @@ CREATE TABLE "users" (
 	"full_name" varchar(120) NOT NULL,
 	"email" varchar(255) NOT NULL,
 	"password" varchar NOT NULL,
-	"role" "Role" DEFAULT 'CLIENT' NOT NULL,
-	"status" "UserStatus" DEFAULT 'ACTIVE' NOT NULL,
+	"role" varchar(20) DEFAULT 'CLIENT' NOT NULL,
+	"status" varchar(20) DEFAULT 'ACTIVE' NOT NULL,
 	"ban_reason" varchar(255),
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamp,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -94,6 +100,7 @@ CREATE TABLE "vehicles" (
 	"is_active" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"deleted_at" timestamp,
 	CONSTRAINT "vehicles_plate_unique" UNIQUE("plate")
 );
 --> statement-breakpoint
@@ -107,6 +114,7 @@ CREATE INDEX "areas_abbrev_state_idx" ON "areas" USING btree ("abbrev_state");--
 CREATE INDEX "areas_geometry_idx" ON "areas" USING gist ("geometry");--> statement-breakpoint
 CREATE INDEX "driver_licenses_driver_id_idx" ON "driver_licenses" USING btree ("driver_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "driver_licenses_active_unique" ON "driver_licenses" USING btree ("driver_id") WHERE "is_active" = true;--> statement-breakpoint
+CREATE UNIQUE INDEX "driver_licenses_cnh_unique" ON "driver_licenses" USING btree ("cnh");--> statement-breakpoint
 CREATE INDEX "drivers_status_idx" ON "drivers" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "drivers_created_at_idx" ON "drivers" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "ride_locations_region_id_idx" ON "ride_locations" USING btree ("region_id");--> statement-breakpoint
@@ -115,8 +123,8 @@ CREATE INDEX "rides_client_id_idx" ON "rides" USING btree ("client_id");--> stat
 CREATE INDEX "rides_driver_id_idx" ON "rides" USING btree ("driver_id");--> statement-breakpoint
 CREATE INDEX "rides_status_idx" ON "rides" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "rides_created_at_idx" ON "rides" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "rides_client_active_idx" ON "rides" USING btree ("client_id") WHERE "status" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS');--> statement-breakpoint
-CREATE INDEX "rides_driver_active_idx" ON "rides" USING btree ("driver_id") WHERE "status" IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS');--> statement-breakpoint
+CREATE INDEX "rides_client_id_status_idx" ON "rides" USING btree ("client_id","status");--> statement-breakpoint
+CREATE INDEX "rides_driver_id_status_idx" ON "rides" USING btree ("driver_id","status");--> statement-breakpoint
 CREATE INDEX "users_role_idx" ON "users" USING btree ("role");--> statement-breakpoint
 CREATE INDEX "users_status_idx" ON "users" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "users_created_at_idx" ON "users" USING btree ("created_at");--> statement-breakpoint
