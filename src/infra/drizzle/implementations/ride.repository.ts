@@ -35,7 +35,7 @@ function toRideDetailed(row: {
     id: row.id,
     clientId: row.clientId,
     driverId: row.driverId,
-    pickup: {
+    origin: {
       name: row.originName,
       lat: row.originLat,
       lng: row.originLng,

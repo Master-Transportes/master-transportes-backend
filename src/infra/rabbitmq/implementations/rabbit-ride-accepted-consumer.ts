@@ -17,12 +17,16 @@ const schema = z.object({
   rideId: z.string().uuid(),
   driverId: z.string().uuid(),
   passengerId: z.string().uuid(),
-  pickupLat: z.number(),
-  pickupLng: z.number(),
-  dropoffLat: z.number(),
-  dropoffLng: z.number(),
-  originName: z.string(),
-  destinationName: z.string(),
+  origin: z.object({
+    name: z.string(),
+    lat: z.number(),
+    lng: z.number(),
+  }),
+  destination: z.object({
+    name: z.string(),
+    lat: z.number(),
+    lng: z.number(),
+  }),
   timestamp: z.string(),
 });
 
@@ -35,22 +39,22 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
     return;
   }
 
-  const region = await areaService.getRegion({ lat: event.pickupLat, lng: event.pickupLng });
-  const originH3 = latLngToCell(event.pickupLat, event.pickupLng, H3_RESOLUTION);
-  const destinationH3 = latLngToCell(event.dropoffLat, event.dropoffLng, H3_RESOLUTION);
+  const region = await areaService.getRegion({ lat: event.origin.lat, lng: event.origin.lng });
+  const originH3 = latLngToCell(event.origin.lat, event.origin.lng, H3_RESOLUTION);
+  const destinationH3 = latLngToCell(event.destination.lat, event.destination.lng, H3_RESOLUTION);
 
   const data: CreateRideData = {
     id: event.rideId,
     clientId: event.passengerId,
     driverId: event.driverId,
     status: "DRIVER_ASSIGNED",
-    originName: event.originName,
-    originLat: event.pickupLat,
-    originLng: event.pickupLng,
+    originName: event.origin.name,
+    originLat: event.origin.lat,
+    originLng: event.origin.lng,
     originH3,
-    destinationName: event.destinationName,
-    destinationLat: event.dropoffLat,
-    destinationLng: event.dropoffLng,
+    destinationName: event.destination.name,
+    destinationLat: event.destination.lat,
+    destinationLng: event.destination.lng,
     destinationH3,
     regionId: region.regionId,
     municipalityId: region.municipalityId,

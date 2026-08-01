@@ -71,3 +71,11 @@ export const cancelRide = api<CancelRideParams, void>(
     await userService.cancelRide(userID, payload);
   },
 );
+
+export const cancelRideRequest = api<{ rideId: string }, void>(
+  { expose: true, method: "DELETE", path: "/ride/request/:rideId/cancel", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await userService.cancelRideRequest(userID, payload.rideId);
+  },
+);

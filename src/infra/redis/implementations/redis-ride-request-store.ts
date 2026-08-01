@@ -12,6 +12,11 @@ export class RedisRideRequestStore implements IRideRequestStore {
   async release(passengerId: string): Promise<void> {
     await redis.del(CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId));
   }
+
+  async getLockedRideId(passengerId: string): Promise<string | null> {
+    const lockKey = CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId);
+    return redis.get(lockKey);
+  }
 }
 
 export const rideRequestStore = new RedisRideRequestStore();

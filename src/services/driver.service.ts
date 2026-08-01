@@ -2,7 +2,7 @@ import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
 import { generateToken, JWT_EXPIRES_IN } from "@/auth/auth";
 import { validateOrThrow } from "@/validations/schema-validator";
-import { SignInSchema, RefreshSchema } from "@/validations/dto/access.validate";
+import { SignInSchema } from "@/validations/dto/access.validate";
 import {
   AcceptOfferSchema,
   CancelRideSchema,
@@ -41,7 +41,6 @@ import { COMPLETION_RADIUS_METERS } from "@/constants/ride";
 
 export class DriverService {
   constructor(
-    private readonly userRepo: IUserRepository,
     private readonly driverRepo: IDriverRepository,
     private readonly rideRepo: IRideRepository,
     private readonly driverLocationCache: IDriverLocationCache,
@@ -224,7 +223,6 @@ export class DriverService {
 }
 
 export const driverService = new DriverService(
-  userRepository,
   driverRepository,
   rideRepository,
   driverLocationCache,

@@ -2,12 +2,8 @@ export interface IRideEventPublisher {
   publishRideRequested(data: {
     rideId: string;
     passengerId: string;
-    pickupLat: number;
-    pickupLng: number;
-    dropoffLat: number;
-    dropoffLng: number;
-    originName: string;
-    destinationName: string;
+    origin: { name: string; lat: number; lng: number };
+    destination: { name: string; lat: number; lng: number };
     timestamp: string;
   }): Promise<boolean>;
 

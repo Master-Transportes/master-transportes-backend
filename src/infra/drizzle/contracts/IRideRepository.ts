@@ -1,6 +1,6 @@
 import type { RideStatus } from "@/dto/shared.types";
 
-export interface PickupLocation {
+export interface OriginLocation {
   name: string;
   lat: number;
   lng: number;
@@ -18,7 +18,7 @@ export interface RideDetailedRow {
   id: string;
   clientId: string;
   driverId: string;
-  pickup: PickupLocation;
+  origin: OriginLocation;
   destination: DestinationLocation;
   regionId: string;
   municipalityId: string;

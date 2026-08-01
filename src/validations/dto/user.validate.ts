@@ -21,12 +21,16 @@ export const ChangePasswordSchema = z.object({
 });
 
 export const RequestRideSchema = z.object({
-  pickupLat: z.number().min(-90).max(90),
-  pickupLng: z.number().min(-180).max(180),
-  dropoffLat: z.number().min(-90).max(90),
-  dropoffLng: z.number().min(-180).max(180),
-  originName: z.string().min(1),
-  destinationName: z.string().min(1),
+  origin: z.object({
+    name: z.string().min(1),
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+  }),
+  destination: z.object({
+    name: z.string().min(1),
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+  }),
 });
 
 export const CancelRideSchema = z.object({

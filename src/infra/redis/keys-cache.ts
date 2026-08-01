@@ -1,8 +1,8 @@
 export const CACHE_KEYS = {
-  USER: (userId: string) => `user:${userId}`,
-  USER_BASE: (userId: string) => `user:${userId}:base`,
-  DRIVER: (driverId: string) => `driver:${driverId}`,
-  DRIVER_BASE: (driverId: string) => `driver:${driverId}:base`,
+  USER: (userId: string) => `user:${userId}`, // dados do USUÁRIO CLIENTE
+  USER_BASE: (userId: string) => `user:${userId}:base`, // dados do USUÁRIO CLIENTE para o middleware
+  DRIVER: (driverId: string) => `driver:${driverId}`, // dados do USUÁRIO MOTORISTA
+  DRIVER_BASE: (driverId: string) => `driver:${driverId}:base`, // dados do USUÁRIO MOTORISTA para o middleware
   USER_SESSIONS: (userId: string) => `user:${userId}:sessions`,
   SESSION: (sessionId: string) => `session:${sessionId}`,
   ACTIVE_RIDE_REQUEST: (userId: string) => `user:${userId}:ride-request`,

@@ -170,12 +170,8 @@ export class UserService {
     await this.rideEventPublisher.publishRideRequested({
       rideId,
       passengerId,
-      pickupLat: data.pickupLat,
-      pickupLng: data.pickupLng,
-      dropoffLat: data.dropoffLat,
-      dropoffLng: data.dropoffLng,
-      originName: data.originName,
-      destinationName: data.destinationName,
+      origin: data.origin,
+      destination: data.destination,
       timestamp: new Date().toISOString(),
     });
     return { rideId };
@@ -184,18 +180,41 @@ export class UserService {
   async cancelRide(passengerId: string, payload: CancelRideParams): Promise<void> {
     const { rideId } = validateOrThrow(CancelRideSchema, payload);
 
+    // Agora só cancela se a corrida já estiver no banco (aceita/em andamento)
     const ride = await this.rideRepo.findActiveByIdAndClient(rideId, passengerId);
     if (!ride) {
       throw APIError.notFound("Corrida não encontrada ou não está ativa.");
     }
 
     await this.rideRepo.updateToCancelled(rideId);
+    if (ride.driverId) {
+      await this.driverStatusStore.setAvailable(ride.driverId);
+    }
 
-    await Promise.all([
-      this.driverStatusStore.setAvailable(ride.driverId),
-      this.rideRequestStore.release(passengerId),
-    ]);
+    // Libera qualquer lock residual (se ainda existir, por segurança)
+    await this.rideRequestStore.release(passengerId);
 
+    await this.rideEventPublisher.publishRideCancelled({
+      rideId,
+      passengerId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  async cancelRideRequest(passengerId: string, rideId: string): Promise<void> {
+    // Verifica se existe um lock de requisição ativa para esse passageiro
+    const lockedRideId = await this.rideRequestStore.getLockedRideId(passengerId);
+    if (!lockedRideId) {
+      throw APIError.notFound("Nenhuma solicitação de corrida ativa encontrada.");
+    }
+    if (lockedRideId !== rideId) {
+      throw APIError.notFound("O ID da corrida não corresponde à solicitação ativa.");
+    }
+
+    // Libera o lock, permitindo que o passageiro faça nova solicitação
+    await this.rideRequestStore.release(passengerId);
+
+    // Publica o evento de cancelamento (o matching-service irá cancelar o estado no Redis)
     await this.rideEventPublisher.publishRideCancelled({
       rideId,
       passengerId,
