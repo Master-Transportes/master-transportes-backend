@@ -12,7 +12,9 @@ export const MATCHING_KEYS = {
   DRIVERS_LOCATION: "drivers:location",
   DRIVERS_H3: (cell: string) => `drivers:h3:${cell}`,
   DRIVER_LOCATION: (id: string) => `driver:${id}:location`,
+  DRIVER_HEARTBEAT: (id: string) => `driver:${id}:heartbeat`,
 } as const;
 
 export const H3_RESOLUTION = 9;
 export const DRIVER_LOCATION_TTL = 300;
+export const DRIVER_HEARTBEAT_TTL = 60;

@@ -5,6 +5,7 @@ import { validateOrThrow } from "@/validations/schema-validator";
 import { SignInSchema } from "@/validations/dto/access.validate";
 import {
   AcceptOfferSchema,
+  RejectOfferSchema,
   CancelRideSchema,
   ChangeDriverPasswordSchema,
   CompleteRideSchema,
@@ -34,7 +35,14 @@ import { driverStatusStore } from "@/infra/redis";
 import { rideRequestStore } from "@/infra/redis";
 import { rideEventPublisher } from "@/infra/rabbitmq";
 import type { UpdateDriverLocationDTO } from "@/dto/driver.interface";
-import type { AcceptOfferDTO, CompleteRideDTO, CancelRideParams, ActiveRideResponse } from "@/dto/driver.interface";
+import type {
+  AcceptOfferDTO,
+  RejectOfferDTO,
+  CompleteRideDTO,
+  CancelRideParams,
+  ActiveRideResponse,
+  DriverStatusResponse,
+} from "@/dto/driver.interface";
 import { haversineDistance } from "@/utils/geo";
 import { isPgUniqueViolation } from "@/constants/database";
 import { COMPLETION_RADIUS_METERS } from "@/constants/ride";
@@ -179,6 +187,27 @@ export class DriverService {
       driverId,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  async rejectOffer(driverId: string, payload: RejectOfferDTO): Promise<void> {
+    const { rideId, offerId } = validateOrThrow(RejectOfferSchema, payload);
+
+    await this.rideEventPublisher.publishOfferRejected({
+      rideId,
+      offerId,
+      driverId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  async getStatus(driverId: string): Promise<DriverStatusResponse> {
+    const status = await this.driverLocationCache.getStatus(driverId);
+    const { ride } = await this.getActiveRide(driverId);
+    return {
+      online: status === "available" || status === "busy",
+      status,
+      activeRideId: ride?.id ?? null,
+    };
   }
 
   async cancelRide(driverId: string, payload: CancelRideParams): Promise<void> {

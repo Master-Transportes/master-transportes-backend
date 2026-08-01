@@ -1,7 +1,6 @@
 name: master-transporte
 
 services:
-
   postgres:
     image: postgis/postgis:15-3.4
     container_name: mt_postgres
@@ -32,6 +31,7 @@ services:
       --protected-mode no
       --maxmemory 512mb
       --maxmemory-policy volatile-lru
+      --notify-keyspace-events Ex
     ports:
       - "6379:6379"
     volumes:
@@ -55,8 +55,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin}
     ports:
-      - "5672:5672"      # porta AMQP (protocolo)
-      - "15672:15672"    # porta da interface web
+      - "5672:5672" # porta AMQP (protocolo)
+      - "15672:15672" # porta da interface web
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:

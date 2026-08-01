@@ -11,6 +11,11 @@ export interface AcceptOfferDTO {
   offerId: string;
 }
 
+export interface RejectOfferDTO {
+  rideId: string;
+  offerId: string;
+}
+
 export interface CompleteRideDTO {
   rideId: string;
   latitude: number;
@@ -19,6 +24,12 @@ export interface CompleteRideDTO {
 
 export interface ActiveRideResponse {
   ride: RideDetailedRow | null;
+}
+
+export interface DriverStatusResponse {
+  online: boolean;
+  status: string | null;
+  activeRideId: string | null;
 }
 
 export interface CancelRideParams {

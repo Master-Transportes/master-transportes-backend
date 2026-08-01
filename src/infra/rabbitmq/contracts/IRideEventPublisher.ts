@@ -7,13 +7,16 @@ export interface IRideEventPublisher {
     timestamp: string;
   }): Promise<boolean>;
 
-  publishRideCancelled(data: {
+  publishRideCancelled(data: { rideId: string; passengerId: string; timestamp: string }): Promise<boolean>;
+
+  publishOfferAccepted(data: {
     rideId: string;
-    passengerId: string;
+    offerId: string;
+    driverId: string;
     timestamp: string;
   }): Promise<boolean>;
 
-  publishOfferAccepted(data: {
+  publishOfferRejected(data: {
     rideId: string;
     offerId: string;
     driverId: string;

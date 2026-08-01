@@ -11,9 +11,11 @@ import type {
 import type {
   UpdateDriverLocationDTO,
   AcceptOfferDTO,
+  RejectOfferDTO,
   CancelRideParams,
   CompleteRideDTO,
   ActiveRideResponse,
+  DriverStatusResponse,
   DriverProfileResponse,
 } from "@/dto/driver.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
@@ -90,6 +92,14 @@ export const acceptOffer = api<AcceptOfferDTO, void>(
   },
 );
 
+export const rejectOffer = api<RejectOfferDTO, void>(
+  { expose: true, method: "POST", path: "/driver/offer/reject", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.rejectOffer(userID, payload);
+  },
+);
+
 export const goOnline = api<void, void>(
   { expose: true, method: "POST", path: "/driver/go-online", auth: true },
   async () => {
@@ -103,6 +113,14 @@ export const goOffline = api<void, void>(
   async () => {
     const { userID } = auth.getAuthData()!;
     await driverService.goOffline(userID);
+  },
+);
+
+export const status = api<void, DriverStatusResponse>(
+  { expose: true, method: "GET", path: "/driver/status", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.getStatus(userID);
   },
 );
 

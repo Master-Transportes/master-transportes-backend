@@ -6,3 +6,4 @@ export { driverLocationCache } from "./implementations/redis-driver-location-cac
 export { driverStatusStore } from "./implementations/redis-driver-status-store";
 export { rideRequestStore } from "./implementations/redis-ride-request-store";
 export { sessionStore } from "./implementations/redis-session-store";
+import "./expiration-listener";

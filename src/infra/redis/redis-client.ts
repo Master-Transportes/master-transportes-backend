@@ -15,7 +15,7 @@ const baseOptions = {
   enableReadyCheck: true,
 };
 
-function createRedisClient(): Redis {
+export function createRedisClient(): Redis {
   const client = new Redis(REDIS_URL, baseOptions);
   logger.info("Creating Redis client", {
     component: "redis-client",

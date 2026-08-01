@@ -2,7 +2,7 @@ import type { IDriverLocationCache } from "@/infra/redis/contracts/IDriverLocati
 import { latLngToCell } from "h3-js";
 import { redis } from "@/infra/redis/redis-client";
 import { metrics } from "@/infra/metrics/metrics";
-import { H3_RESOLUTION, MATCHING_KEYS, DRIVER_LOCATION_TTL } from "@/infra/redis/keys-cache";
+import { H3_RESOLUTION, MATCHING_KEYS, DRIVER_LOCATION_TTL, DRIVER_HEARTBEAT_TTL } from "@/infra/redis/keys-cache";
 
 export class RedisDriverLocationCache implements IDriverLocationCache {
   async saveLocation(driverId: string, latitude: number, longitude: number): Promise<void> {
@@ -28,6 +28,9 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
       now,
     );
     pipeline.expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL);
+
+    // Renova o heartbeat: se os pings pararem, a chave expira e o subscriber remove o motorista dos índices
+    pipeline.set(MATCHING_KEYS.DRIVER_HEARTBEAT(driverId), "1", "EX", DRIVER_HEARTBEAT_TTL);
 
     // Se estiver online, atualiza também o índice geo e H3
     if (isOnline) {
@@ -84,6 +87,10 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
 
     metrics.incCounter("driver_go_offline_total");
     metrics.observeHistogram("driver_location_operation_duration_ms", Date.now() - startTime);
+  }
+
+  async getStatus(driverId: string): Promise<string | null> {
+    return redis.hget(MATCHING_KEYS.DRIVER_LOCATION(driverId), "status");
   }
 
   /**
