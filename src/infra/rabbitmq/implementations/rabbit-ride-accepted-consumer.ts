@@ -4,6 +4,7 @@ import { z } from "zod";
 import { latLngToCell } from "h3-js";
 import { H3_RESOLUTION } from "@/infra/redis/keys-cache";
 import { rideRepository } from "@/infra/drizzle";
+import { rideRequestStore } from "@/infra/redis";
 import { areaService } from "@/services/area.service";
 import { logger } from "@/infra/observability/logger";
 import { ensureChannel } from "@/infra/rabbitmq/connection";
@@ -35,6 +36,7 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
 
   const existing = await rideRepository.findById(event.rideId);
   if (existing) {
+    await rideRequestStore.release(event.passengerId);
     logger.info("Ride already exists, skipping duplicate", { rideId: event.rideId, component: "ride-accepted-consumer" });
     return;
   }
@@ -61,6 +63,7 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
   };
 
   await rideRepository.createRideAndLocation(data);
+  await rideRequestStore.release(event.passengerId);
 
   logger.info("Ride created from driver.accepted event", { rideId: event.rideId, component: "ride-accepted-consumer" });
 }

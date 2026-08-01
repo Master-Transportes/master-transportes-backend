@@ -11,6 +11,8 @@ import type {
   RideListResponse,
   UpdateProfileDTO,
   UserProfileResponse,
+  ActiveRideResponse,
+  PendingRideRequestResponse,
 } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, GetMeResponse } from "@/dto/access.interface";
 
@@ -77,5 +79,21 @@ export const cancelRideRequest = api<{ rideId: string }, void>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     await userService.cancelRideRequest(userID, payload.rideId);
+  },
+);
+
+export const getActiveRide = api<void, ActiveRideResponse>(
+  { expose: true, method: "GET", path: "/ride/active", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return userService.getActiveRide(userID);
+  },
+);
+
+export const getPendingRideRequest = api<void, PendingRideRequestResponse>(
+  { expose: true, method: "GET", path: "/ride/request/pending", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return userService.getPendingRideRequest(userID);
   },
 );

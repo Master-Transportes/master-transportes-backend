@@ -19,6 +19,8 @@ import type {
   RideSummary,
   RequestRideResponse,
   RequestRideDTO,
+  ActiveRideResponse,
+  PendingRideRequestResponse,
 } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
 import type { Role } from "@/infra/drizzle/schema";
@@ -143,6 +145,16 @@ export class UserService {
   async getRides(userID: string): Promise<{ rides: RideSummary[] }> {
     const result = await this.rideRepo.findByClientId(userID);
     return { rides: result };
+  }
+
+  async getActiveRide(passengerId: string): Promise<ActiveRideResponse> {
+    const ride = await this.rideRepo.findActiveByClientDetailed(passengerId);
+    return { ride };
+  }
+
+  async getPendingRideRequest(passengerId: string): Promise<PendingRideRequestResponse> {
+    const rideId = await this.rideRequestStore.getLockedRideId(passengerId);
+    return { rideId };
   }
 
   async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {

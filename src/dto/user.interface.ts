@@ -1,4 +1,5 @@
 import type { Role, UserStatus } from "./shared.types.ts";
+import type { RideWithDriverRow } from "@/infra/drizzle/contracts/IRideRepository";
 
 export interface RegisterUserDTO {
   fullName: string;
@@ -74,4 +75,12 @@ export interface RequestRideResponse {
 
 export interface CancelRideParams {
   rideId: string;
+}
+
+export interface ActiveRideResponse {
+  ride: RideWithDriverRow | null;
+}
+
+export interface PendingRideRequestResponse {
+  rideId: string | null;
 }

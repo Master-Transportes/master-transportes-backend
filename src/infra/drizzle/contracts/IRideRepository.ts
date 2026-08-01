@@ -65,11 +65,28 @@ export interface RideActiveRow {
   deletedAt: Date | null;
 }
 
+export interface RideWithDriverVehicle {
+  brand: string;
+  model: string;
+  year: number;
+  color: string;
+  plate: string;
+}
+
+export interface RideWithDriverRow extends RideDetailedRow {
+  driver: {
+    name: string;
+    photo: string | null;
+    vehicle: RideWithDriverVehicle | null;
+  };
+}
+
 export interface IRideRepository {
   findById(rideId: string): Promise<RideDetailedRow | null>;
   findByClientId(clientId: string): Promise<RideDetailedRow[]>;
   findByDriverId(driverId: string): Promise<RideDetailedRow[]>;
   findActiveByClientId(clientId: string): Promise<boolean>;
+  findActiveByClientDetailed(clientId: string): Promise<RideWithDriverRow | null>;
   findActiveByDriverId(driverId: string): Promise<RideDetailedRow | null>;
   findActiveByIdAndClient(rideId: string, clientId: string): Promise<RideActiveRow | null>;
   findActiveByIdAndDriver(rideId: string, driverId: string): Promise<RideDetailedRow | null>;

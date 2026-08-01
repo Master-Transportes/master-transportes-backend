@@ -1,11 +1,17 @@
-import { and, eq, desc, inArray, isNull } from "drizzle-orm";
-import { rides, rideLocations } from "../schema";
+import { and, eq, desc, inArray, isNull, type SQL } from "drizzle-orm";
+import { rides, rideLocations, drivers, vehicles } from "../schema";
 import type { RideStatus } from "../schema";
 import { db } from "../drizzle";
 import { ACTIVE_RIDE_STATUSES } from "@/constants/ride";
-import type { IRideRepository, RideDetailedRow, CreateRideData, RideActiveRow } from "../contracts/IRideRepository";
+import type {
+  IRideRepository,
+  RideDetailedRow,
+  CreateRideData,
+  RideActiveRow,
+  RideWithDriverRow,
+} from "../contracts/IRideRepository";
 
-function toRideDetailed(row: {
+type RideRow = {
   id: string;
   clientId: string;
   driverId: string;
@@ -30,7 +36,18 @@ function toRideDetailed(row: {
   cancelReason: string | null;
   createdAt: Date;
   deletedAt: Date | null;
-}): RideDetailedRow {
+};
+
+type RideWithDriverRowShape = RideRow & {
+  driverFullName: string;
+  vehicleBrand: string | null;
+  vehicleModel: string | null;
+  vehicleYear: number | null;
+  vehicleColor: string | null;
+  vehiclePlate: string | null;
+};
+
+function toRideDetailed(row: RideRow): RideDetailedRow {
   return {
     id: row.id,
     clientId: row.clientId,
@@ -60,6 +77,26 @@ function toRideDetailed(row: {
     cancelReason: row.cancelReason,
     createdAt: row.createdAt,
     deletedAt: row.deletedAt,
+  };
+}
+
+function toRideWithDriver(row: RideWithDriverRowShape): RideWithDriverRow {
+  const ride = toRideDetailed(row);
+  return {
+    ...ride,
+    driver: {
+      name: row.driverFullName,
+      photo: null,
+      vehicle: row.vehiclePlate
+        ? {
+            brand: row.vehicleBrand!,
+            model: row.vehicleModel!,
+            year: row.vehicleYear!,
+            color: row.vehicleColor!,
+            plate: row.vehiclePlate,
+          }
+        : null,
+    },
   };
 }
 
@@ -134,11 +171,36 @@ export class RideRepository implements IRideRepository {
   }
 
   async findActiveByDriverId(driverId: string): Promise<RideDetailedRow | null> {
+    return this.queryActiveDetailed(and(eq(rides.driverId, driverId), inArray(rides.status, ACTIVE_RIDE_STATUSES)));
+  }
+
+  async findActiveByClientDetailed(clientId: string): Promise<RideWithDriverRow | null> {
+    const [row] = await db
+      .select({
+        ...SELECT_COLUMNS,
+        driverFullName: drivers.fullName,
+        vehicleBrand: vehicles.brand,
+        vehicleModel: vehicles.model,
+        vehicleYear: vehicles.year,
+        vehicleColor: vehicles.color,
+        vehiclePlate: vehicles.plate,
+      })
+      .from(rides)
+      .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
+      .innerJoin(drivers, eq(rides.driverId, drivers.id))
+      .leftJoin(vehicles, and(eq(vehicles.driverId, rides.driverId), eq(vehicles.isActive, true)))
+      .where(and(eq(rides.clientId, clientId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
+      .limit(1);
+
+    return row ? toRideWithDriver(row) : null;
+  }
+
+  private async queryActiveDetailed(where: SQL | undefined): Promise<RideDetailedRow | null> {
     const [row] = await db
       .select(SELECT_COLUMNS)
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(and(eq(rides.driverId, driverId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
+      .where(and(where, isNull(rides.deletedAt)))
       .limit(1);
 
     return row ? toRideDetailed(row) : null;
