@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { type ConsumeMessage } from "amqplib";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { latLngToCell } from "h3-js";
 import { H3_RESOLUTION } from "@/infra/redis/keys-cache";
 import { rideRepository } from "@/infra/drizzle";
@@ -36,8 +36,11 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
 
   const existing = await rideRepository.findById(event.rideId);
   if (existing) {
-    await rideRequestStore.release(event.passengerId);
-    logger.info("Ride already exists, skipping duplicate", { rideId: event.rideId, component: "ride-accepted-consumer" });
+    await rideRequestStore.releaseIfLocked(event.passengerId, event.rideId);
+    logger.info("Ride already exists, skipping duplicate", {
+      rideId: event.rideId,
+      component: "ride-accepted-consumer",
+    });
     return;
   }
 
@@ -63,7 +66,7 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
   };
 
   await rideRepository.createRideAndLocation(data);
-  await rideRequestStore.release(event.passengerId);
+  await rideRequestStore.releaseIfLocked(event.passengerId, event.rideId);
 
   logger.info("Ride created from driver.accepted event", { rideId: event.rideId, component: "ride-accepted-consumer" });
 }
@@ -71,14 +74,15 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
 export async function startConsumer(): Promise<void> {
   const ch = await ensureChannel(EXCHANGE, QUEUE, ROUTING_KEY);
   await ch.prefetch(1);
-  await ch.consume(QUEUE, async (msg) => {
+  await ch.consume(QUEUE, async msg => {
     if (!msg) return;
     try {
       await handleMessage(msg);
       ch.ack(msg);
     } catch (err) {
+      const poison = err instanceof ZodError || err instanceof SyntaxError;
       logger.error("Failed to process ride.driver.accepted", err, { component: "ride-accepted-consumer" });
-      ch.nack(msg, false, true);
+      ch.nack(msg, false, !poison);
     }
   });
   logger.info("ride-accepted consumer started", { component: "ride-accepted-consumer" });

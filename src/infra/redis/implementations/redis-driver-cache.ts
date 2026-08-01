@@ -40,7 +40,7 @@ export class RedisDriverCache implements IDriverCache {
 
   async invalidate(driverId: string): Promise<void> {
     const startTime = Date.now();
-    await redis.del(CACHE_KEYS.DRIVER(driverId));
+    await Promise.all([redis.del(CACHE_KEYS.DRIVER(driverId)), redis.del(CACHE_KEYS.DRIVER_BASE(driverId))]);
     metrics.incCounter("driver_cache_invalidate_total");
     metrics.observeHistogram("driver_cache_operation_duration_ms", Date.now() - startTime);
   }

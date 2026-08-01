@@ -5,12 +5,19 @@ import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStor
 export class RedisRideRequestStore implements IRideRequestStore {
   async lock(passengerId: string, rideId: string): Promise<boolean> {
     const lockKey = CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId);
-    const result = await redis.set(lockKey, rideId, "EX", 3600, "NX");
+    const result = await redis.set(lockKey, rideId, "EX", 600, "NX");
     return result !== null;
   }
 
   async release(passengerId: string): Promise<void> {
     await redis.del(CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId));
+  }
+
+  async releaseIfLocked(passengerId: string, rideId: string): Promise<void> {
+    const lockedRideId = await this.getLockedRideId(passengerId);
+    if (lockedRideId === rideId) {
+      await this.release(passengerId);
+    }
   }
 
   async getLockedRideId(passengerId: string): Promise<string | null> {

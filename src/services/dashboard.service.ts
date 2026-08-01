@@ -13,10 +13,15 @@ import type {
   ListUsersData,
   ListSystemUsersData,
 } from "@/infra/drizzle/contracts/IUserAdminRepository";
+import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
 import { userAdminRepository } from "@/infra/drizzle";
+import { userCache } from "@/infra/redis";
 
 export class DashboardService {
-  constructor(private readonly userAdminRepo: IUserAdminRepository) {}
+  constructor(
+    private readonly userAdminRepo: IUserAdminRepository,
+    private readonly userCacheService: IUserCache,
+  ) {}
 
   async listUsers(params: ListUsersParams): Promise<PaginatedUsersResponse> {
     const data: ListUsersData = validateOrThrow(ListUsersSchema, params);
@@ -33,6 +38,7 @@ export class DashboardService {
     if (!result) {
       throw APIError.notFound("Usuário não encontrado.");
     }
+    await this.userCacheService.invalidate(userId);
     return result;
   }
 
@@ -42,8 +48,9 @@ export class DashboardService {
     if (!result) {
       throw APIError.notFound("Usuário não encontrado.");
     }
+    await this.userCacheService.invalidate(payload.id);
     return result;
   }
 }
 
-export const dashboardService = new DashboardService(userAdminRepository);
+export const dashboardService = new DashboardService(userAdminRepository, userCache);

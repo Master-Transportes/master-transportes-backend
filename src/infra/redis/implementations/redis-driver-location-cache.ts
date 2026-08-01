@@ -38,6 +38,7 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
         pipeline.srem(MATCHING_KEYS.DRIVERS_H3(current.cell), driverId);
       }
       pipeline.sadd(MATCHING_KEYS.DRIVERS_H3(cell), driverId);
+      pipeline.expire(MATCHING_KEYS.DRIVERS_H3(cell), DRIVER_LOCATION_TTL);
     }
 
     await pipeline.exec();
@@ -56,24 +57,13 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
       return;
     }
 
-    // Se já estiver online, não faz nada (ou apenas renova TTLs)
+    // Se já estiver online, apenas renova TTLs e garante presença no índice geo/H3
     if (driver?.status === "available") {
-      // Opcional: renovar TTL do hash e dos índices para não expirar
-      await redis
-        .pipeline()
-        .expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL)
-        .expire(MATCHING_KEYS.DRIVERS_H3(cell), DRIVER_LOCATION_TTL)
-        .exec();
+      await this._refreshIndexes(driverId, lat, lng, cell);
       return;
     }
 
-    await redis
-      .pipeline()
-      .geoadd(MATCHING_KEYS.DRIVERS_LOCATION, Number(lng), Number(lat), driverId)
-      .sadd(MATCHING_KEYS.DRIVERS_H3(cell), driverId)
-      .hset(MATCHING_KEYS.DRIVER_LOCATION(driverId), "status", "available")
-      .expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL)
-      .exec();
+    await this._refreshIndexes(driverId, lat, lng, cell, "available");
 
     metrics.incCounter("driver_go_online_total");
     metrics.observeHistogram("driver_location_operation_duration_ms", Date.now() - startTime);
@@ -89,10 +79,34 @@ export class RedisDriverLocationCache implements IDriverLocationCache {
       pipeline.srem(MATCHING_KEYS.DRIVERS_H3(cell), driverId);
     }
     pipeline.hset(MATCHING_KEYS.DRIVER_LOCATION(driverId), "status", "offline");
+    pipeline.expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL);
     await pipeline.exec();
 
     metrics.incCounter("driver_go_offline_total");
     metrics.observeHistogram("driver_location_operation_duration_ms", Date.now() - startTime);
+  }
+
+  /**
+   * Garante presença do motorista nos índices geo/H3 e renova os TTLs.
+   * Se `status` for informado, atualiza-o no hash (ex.: "available" ao ficar online).
+   */
+  private async _refreshIndexes(
+    driverId: string,
+    lat: string,
+    lng: string,
+    cell: string,
+    status?: string,
+  ): Promise<void> {
+    const pipeline = redis
+      .pipeline()
+      .geoadd(MATCHING_KEYS.DRIVERS_LOCATION, Number(lng), Number(lat), driverId)
+      .sadd(MATCHING_KEYS.DRIVERS_H3(cell), driverId)
+      .expire(MATCHING_KEYS.DRIVERS_H3(cell), DRIVER_LOCATION_TTL)
+      .expire(MATCHING_KEYS.DRIVER_LOCATION(driverId), DRIVER_LOCATION_TTL);
+    if (status) {
+      pipeline.hset(MATCHING_KEYS.DRIVER_LOCATION(driverId), "status", status);
+    }
+    await pipeline.exec();
   }
 }
 
