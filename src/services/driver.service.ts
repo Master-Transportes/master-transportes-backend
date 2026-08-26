@@ -15,7 +15,6 @@ import {
 } from "@/validations/dto/driver.validate";
 import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
-import type { IUserRepository } from "@/infra/drizzle/contracts/IUserRepository";
 import type { IDriverRepository } from "@/infra/drizzle/contracts/IDriverRepository";
 import type { DriverProfileResponse } from "@/dto/driver.interface";
 import type { IRideRepository, RideDetailedRow } from "@/infra/drizzle/contracts/IRideRepository";
@@ -25,7 +24,6 @@ import type { IDriverLocationCache } from "@/infra/redis/contracts/IDriverLocati
 import type { IDriverStatusStore } from "@/infra/redis/contracts/IDriverStatusStore";
 import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStore";
 import type { IRideEventPublisher } from "@/infra/rabbitmq/contracts/IRideEventPublisher";
-import { userRepository } from "@/infra/drizzle";
 import { driverRepository } from "@/infra/drizzle";
 import { rideRepository } from "@/infra/drizzle";
 import { sessionStore } from "@/infra/redis";
@@ -121,7 +119,19 @@ export class DriverService {
   }
 
   async refreshSession(sessionId: string, refreshToken: string): Promise<RefreshResponse> {
-    const { refreshToken: newRefreshToken, userId } = await this.sessionStore.refresh(sessionId, refreshToken);
+    const { refreshToken: newRefreshToken, userId, role } = await this.sessionStore.refresh(sessionId, refreshToken);
+
+    if (role !== "DRIVER") {
+      throw APIError.permissionDenied("Sessão não pertence a um motorista.");
+    }
+
+    const driver = await this.driverRepo.findByIdWithStatus(userId);
+    if (!driver) {
+      throw APIError.notFound("Motorista não encontrado.");
+    }
+    if (driver.status !== "APPROVED") {
+      throw APIError.permissionDenied("Motorista não está aprovado.");
+    }
 
     const accessToken = generateToken({ userID: userId, sessionID: sessionId });
 
@@ -165,12 +175,14 @@ export class DriverService {
     await this.driverLocationCache.saveLocation(userID, latitude, longitude);
   }
 
-  async goOnline(userID: string): Promise<void> {
+  async goOnline(userID: string): Promise<DriverStatusResponse> {
     await this.driverLocationCache.goOnline(userID);
+    return this.getStatus(userID);
   }
 
-  async goOffline(userID: string): Promise<void> {
+  async goOffline(userID: string): Promise<DriverStatusResponse> {
     await this.driverLocationCache.goOffline(userID);
+    return this.getStatus(userID);
   }
 
   async getActiveRide(driverId: string): Promise<ActiveRideResponse> {
@@ -202,11 +214,8 @@ export class DriverService {
 
   async getStatus(driverId: string): Promise<DriverStatusResponse> {
     const status = await this.driverLocationCache.getStatus(driverId);
-    const { ride } = await this.getActiveRide(driverId);
     return {
       online: status === "available" || status === "busy",
-      status,
-      activeRideId: ride?.id ?? null,
     };
   }
 
@@ -217,7 +226,7 @@ export class DriverService {
       throw APIError.notFound("Corrida não encontrada ou não está ativa.");
     }
 
-    await this.rideRepo.updateToCancelled(rideId);
+    await this.rideRepo.updateToCancelled(rideId, "DRIVER");
 
     await Promise.all([this.driverStatusStore.setAvailable(driverId), this.rideRequestStore.release(ride.clientId)]);
 

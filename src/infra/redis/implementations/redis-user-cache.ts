@@ -1,6 +1,7 @@
 import { redis } from "@/infra/redis/redis-client";
 import { CACHE_KEYS } from "@/infra/redis/keys-cache";
 import { metrics } from "@/infra/metrics/metrics";
+import { PROFILE_CACHE_TTL_SECONDS } from "@/constants/cache";
 import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
 
 export class RedisUserCache implements IUserCache {
@@ -26,14 +27,14 @@ export class RedisUserCache implements IUserCache {
 
   async setProfile(userId: string, profile: Record<string, unknown>): Promise<void> {
     const startTime = Date.now();
-    await redis.set(CACHE_KEYS.USER(userId), JSON.stringify(profile), "EX", 600);
+    await redis.set(CACHE_KEYS.USER(userId), JSON.stringify(profile), "EX", PROFILE_CACHE_TTL_SECONDS);
     metrics.incCounter("user_cache_set_total");
     metrics.observeHistogram("user_cache_operation_duration_ms", Date.now() - startTime);
   }
 
   async setBase(userId: string, data: { role: string; status: string }): Promise<void> {
     const startTime = Date.now();
-    await redis.set(CACHE_KEYS.USER_BASE(userId), JSON.stringify(data), "EX", 600);
+    await redis.set(CACHE_KEYS.USER_BASE(userId), JSON.stringify(data), "EX", PROFILE_CACHE_TTL_SECONDS);
     metrics.incCounter("user_cache_set_base_total");
     metrics.observeHistogram("user_cache_operation_duration_ms", Date.now() - startTime);
   }

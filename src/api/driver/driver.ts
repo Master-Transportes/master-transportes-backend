@@ -33,6 +33,16 @@ export const me = api<void, DriverProfileResponse>(
   },
 );
 
+export const getWallet = api<void, { balanceInCents: number; currency: string }>(
+  { expose: true, method: "GET", path: "/driver/wallet", auth: true },
+  async () => {
+    return {
+      balanceInCents: 15340,
+      currency: "BRL",
+    };
+  },
+);
+
 export const logout = api<void, { message: string }>(
   { expose: true, method: "POST", path: "/driver/logout", auth: true },
   async () => {
@@ -100,19 +110,19 @@ export const rejectOffer = api<RejectOfferDTO, void>(
   },
 );
 
-export const goOnline = api<void, void>(
+export const goOnline = api<void, DriverStatusResponse>(
   { expose: true, method: "POST", path: "/driver/go-online", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    await driverService.goOnline(userID);
+    return driverService.goOnline(userID);
   },
 );
 
-export const goOffline = api<void, void>(
+export const goOffline = api<void, DriverStatusResponse>(
   { expose: true, method: "POST", path: "/driver/go-offline", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    await driverService.goOffline(userID);
+    return driverService.goOffline(userID);
   },
 );
 

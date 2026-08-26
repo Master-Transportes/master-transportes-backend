@@ -1,3 +1,4 @@
+import { APIError } from "encore.dev/api";
 import { and, eq, desc, inArray, isNull, type SQL } from "drizzle-orm";
 import { rides, rideLocations, drivers, vehicles } from "../schema";
 import type { RideStatus } from "../schema";
@@ -221,7 +222,14 @@ export class RideRepository implements IRideRepository {
         deletedAt: rides.deletedAt,
       })
       .from(rides)
-      .where(and(eq(rides.id, rideId), eq(rides.clientId, clientId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
+      .where(
+        and(
+          eq(rides.id, rideId),
+          eq(rides.clientId, clientId),
+          inArray(rides.status, ACTIVE_RIDE_STATUSES),
+          isNull(rides.deletedAt),
+        ),
+      )
       .limit(1);
 
     return row ?? null;
@@ -232,27 +240,41 @@ export class RideRepository implements IRideRepository {
       .select(SELECT_COLUMNS)
       .from(rides)
       .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(and(eq(rides.id, rideId), eq(rides.driverId, driverId), inArray(rides.status, ACTIVE_RIDE_STATUSES), isNull(rides.deletedAt)))
+      .where(
+        and(
+          eq(rides.id, rideId),
+          eq(rides.driverId, driverId),
+          inArray(rides.status, ACTIVE_RIDE_STATUSES),
+          isNull(rides.deletedAt),
+        ),
+      )
       .limit(1);
 
     return row ? toRideDetailed(row) : null;
   }
 
   async updateToCompleted(rideId: string): Promise<RideDetailedRow> {
-    const [row] = await db
-      .update(rides)
-      .set({ status: "COMPLETED" as RideStatus, completedAt: new Date() })
-      .where(eq(rides.id, rideId))
-      .returning();
-
-    const detailed = await this.findById(rideId);
-    return detailed!;
-  }
-
-  async updateToCancelled(rideId: string): Promise<void> {
     await db
       .update(rides)
-      .set({ status: "CANCELLED" as RideStatus, cancelledAt: new Date(), cancelledBy: "system", cancelReason: null })
+      .set({ status: "COMPLETED" as RideStatus, completedAt: new Date() })
+      .where(eq(rides.id, rideId));
+
+    const detailed = await this.findById(rideId);
+    if (!detailed) {
+      throw APIError.notFound("Corrida não encontrada após a conclusão.");
+    }
+    return detailed;
+  }
+
+  async updateToCancelled(rideId: string, cancelledBy: string, cancelReason?: string | null): Promise<void> {
+    await db
+      .update(rides)
+      .set({
+        status: "CANCELLED" as RideStatus,
+        cancelledAt: new Date(),
+        cancelledBy,
+        cancelReason: cancelReason ?? null,
+      })
       .where(eq(rides.id, rideId));
   }
 

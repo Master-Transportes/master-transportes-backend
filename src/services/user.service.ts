@@ -129,6 +129,14 @@ export class UserService {
     validateOrThrow(RefreshSchema, { refreshToken, sessionId });
     const { refreshToken: newRefreshToken, userId } = await this.sessionStore.refresh(sessionId, refreshToken);
 
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw APIError.notFound("Usuário não encontrado.");
+    }
+    if (user.status !== "ACTIVE") {
+      throw APIError.permissionDenied("Usuário inativo.");
+    }
+
     const accessToken = generateToken({ userID: userId, sessionID: sessionId });
 
     return { accessToken, refreshToken: newRefreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
@@ -198,7 +206,7 @@ export class UserService {
       throw APIError.notFound("Corrida não encontrada ou não está ativa.");
     }
 
-    await this.rideRepo.updateToCancelled(rideId);
+    await this.rideRepo.updateToCancelled(rideId, "CLIENT");
     if (ride.driverId) {
       await this.driverStatusStore.setAvailable(ride.driverId);
     }

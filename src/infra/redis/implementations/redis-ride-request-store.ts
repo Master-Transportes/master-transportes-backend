@@ -1,11 +1,12 @@
 import { redis } from "@/infra/redis/redis-client";
 import { CACHE_KEYS } from "@/infra/redis/keys-cache";
+import { RIDE_REQUEST_LOCK_TTL_SECONDS } from "@/constants/cache";
 import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStore";
 
 export class RedisRideRequestStore implements IRideRequestStore {
   async lock(passengerId: string, rideId: string): Promise<boolean> {
     const lockKey = CACHE_KEYS.ACTIVE_RIDE_REQUEST(passengerId);
-    const result = await redis.set(lockKey, rideId, "EX", 600, "NX");
+    const result = await redis.set(lockKey, rideId, "EX", RIDE_REQUEST_LOCK_TTL_SECONDS, "NX");
     return result !== null;
   }
 

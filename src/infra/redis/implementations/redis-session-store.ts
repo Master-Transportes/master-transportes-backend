@@ -3,11 +3,10 @@ import { createHash, randomBytes, randomUUID } from "crypto";
 import { CACHE_KEYS } from "@/infra/redis/keys-cache";
 import { redis } from "@/infra/redis/redis-client";
 import { metrics } from "@/infra/metrics/metrics";
+import { SESSION_TTL_SECONDS } from "@/constants/cache";
 import type { Session } from "@/dto/session.interface";
 import type { Role } from "@/infra/drizzle/schema";
 import type { ISessionStore } from "@/infra/redis/contracts/ISessionStore";
-
-const SEVEN_DAYS_IN_S = 7 * 24 * 60 * 60;
 
 export class RedisSessionStore implements ISessionStore {
   private generateRefreshToken(): string {
@@ -18,10 +17,7 @@ export class RedisSessionStore implements ISessionStore {
     return createHash("sha256").update(token).digest("hex");
   }
 
-  async create(input: {
-    userId: string;
-    role: Role;
-  }): Promise<{ sessionId: string; refreshToken: string }> {
+  async create(input: { userId: string; role: Role }): Promise<{ sessionId: string; refreshToken: string }> {
     const startTime = Date.now();
     const sessionId = randomUUID();
     const refreshToken = this.generateRefreshToken();
@@ -34,13 +30,13 @@ export class RedisSessionStore implements ISessionStore {
       role: input.role,
       refreshHash,
       createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + SEVEN_DAYS_IN_S * 1000).toISOString(),
+      expiresAt: new Date(now.getTime() + SESSION_TTL_SECONDS * 1000).toISOString(),
     };
 
     await Promise.all([
-      redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(session), "EX", SEVEN_DAYS_IN_S),
+      redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(session), "EX", SESSION_TTL_SECONDS),
       redis.sadd(CACHE_KEYS.USER_SESSIONS(input.userId), sessionId),
-      redis.expire(CACHE_KEYS.USER_SESSIONS(input.userId), SEVEN_DAYS_IN_S),
+      redis.expire(CACHE_KEYS.USER_SESSIONS(input.userId), SESSION_TTL_SECONDS),
     ]);
 
     metrics.incCounter("session_create_total");
@@ -58,7 +54,10 @@ export class RedisSessionStore implements ISessionStore {
     return JSON.parse(raw) as Session;
   }
 
-  async refresh(sessionId: string, oldRefreshToken: string): Promise<{ refreshToken: string; userId: string }> {
+  async refresh(
+    sessionId: string,
+    oldRefreshToken: string,
+  ): Promise<{ refreshToken: string; userId: string; role: string }> {
     const startTime = Date.now();
     const session = await this.get(sessionId);
 
@@ -80,14 +79,14 @@ export class RedisSessionStore implements ISessionStore {
     };
 
     await Promise.all([
-      redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(updated), "EX", SEVEN_DAYS_IN_S),
-      redis.expire(CACHE_KEYS.USER_SESSIONS(session.userId), SEVEN_DAYS_IN_S),
+      redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(updated), "EX", SESSION_TTL_SECONDS),
+      redis.expire(CACHE_KEYS.USER_SESSIONS(session.userId), SESSION_TTL_SECONDS),
     ]);
 
     metrics.incCounter("session_refresh_total");
     metrics.observeHistogram("session_operation_duration_ms", Date.now() - startTime);
 
-    return { refreshToken: newRefreshToken, userId: session.userId };
+    return { refreshToken: newRefreshToken, userId: session.userId, role: session.role };
   }
 
   async revoke(sessionId: string): Promise<void> {
@@ -112,10 +111,7 @@ export class RedisSessionStore implements ISessionStore {
 
     const keys = sessionIds.map((sid: string) => CACHE_KEYS.SESSION(sid));
 
-    await Promise.all([
-      ...keys.map((key: string) => redis.del(key)),
-      redis.del(CACHE_KEYS.USER_SESSIONS(userId)),
-    ]);
+    await Promise.all([...keys.map((key: string) => redis.del(key)), redis.del(CACHE_KEYS.USER_SESSIONS(userId))]);
 
     metrics.incCounter("session_revoke_all_total");
     metrics.observeHistogram("session_operation_duration_ms", Date.now() - startTime);

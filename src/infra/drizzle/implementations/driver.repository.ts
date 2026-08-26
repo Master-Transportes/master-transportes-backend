@@ -5,21 +5,18 @@ import type { IDriverRepository, DriverRow, CreateDriverData, DriverWithProfile 
 
 export class DriverRepository implements IDriverRepository {
   async create(data: CreateDriverData): Promise<DriverRow> {
-    const [driver] = await db
-      .insert(drivers)
-      .values(data)
-      .returning({
-        id: drivers.id,
-        fullName: drivers.fullName,
-        email: drivers.email,
-        status: drivers.status,
-        rejectionReason: drivers.rejectionReason,
-        banReason: drivers.banReason,
-        approvedAt: drivers.approvedAt,
-        createdAt: drivers.createdAt,
-        updatedAt: drivers.updatedAt,
-        deletedAt: drivers.deletedAt,
-      });
+    const [driver] = await db.insert(drivers).values(data).returning({
+      id: drivers.id,
+      fullName: drivers.fullName,
+      email: drivers.email,
+      status: drivers.status,
+      rejectionReason: drivers.rejectionReason,
+      banReason: drivers.banReason,
+      approvedAt: drivers.approvedAt,
+      createdAt: drivers.createdAt,
+      updatedAt: drivers.updatedAt,
+      deletedAt: drivers.deletedAt,
+    });
     return driver;
   }
 
@@ -44,14 +41,18 @@ export class DriverRepository implements IDriverRepository {
     const [row] = await db
       .select({ id: drivers.id, password: drivers.password, status: drivers.status })
       .from(drivers)
-      .where(eq(drivers.email, email.toLowerCase()))
+      .where(eq(drivers.email, email))
       .limit(1);
     return row ?? null;
   }
 
-  async findByIdWithStatus(id: string): Promise<{ role: string; status: string } | null> {
-    const [row] = await db.select({ status: drivers.status }).from(drivers).where(and(eq(drivers.id, id), isNull(drivers.deletedAt))).limit(1);
-    return row ? { role: "DRIVER", status: row.status } : null;
+  async findByIdWithStatus(id: string): Promise<{ status: string } | null> {
+    const [row] = await db
+      .select({ status: drivers.status })
+      .from(drivers)
+      .where(and(eq(drivers.id, id), isNull(drivers.deletedAt)))
+      .limit(1);
+    return row ?? null;
   }
 
   async findPasswordById(id: string): Promise<{ id: string; password: string } | null> {

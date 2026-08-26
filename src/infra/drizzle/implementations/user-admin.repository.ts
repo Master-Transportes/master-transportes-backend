@@ -1,8 +1,8 @@
 import { eq, desc, inArray, sql, and, ilike, isNull } from "drizzle-orm";
 import { users } from "../schema";
-import type { Role } from "../schema";
 import type { PaginatedUsersResponse, DashboardActionResponse } from "@/dto/dashboard.interface";
 import { db } from "../drizzle";
+import { SYSTEM_ROLES } from "@/constants/system";
 import type { IUserAdminRepository, ListUsersData, ListSystemUsersData } from "../contracts/IUserAdminRepository";
 
 const LIST_COLUMNS = {
@@ -15,8 +15,6 @@ const LIST_COLUMNS = {
   createdAt: users.createdAt,
   updatedAt: users.updatedAt,
 } as const;
-
-const SYSTEM_ROLES: Role[] = ["ADMIN", "EMPLOYEE"];
 
 export class UserAdminRepository implements IUserAdminRepository {
   async listUsers(data: ListUsersData): Promise<PaginatedUsersResponse> {

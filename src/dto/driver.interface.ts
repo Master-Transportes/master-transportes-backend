@@ -28,8 +28,6 @@ export interface ActiveRideResponse {
 
 export interface DriverStatusResponse {
   online: boolean;
-  status: string | null;
-  activeRideId: string | null;
 }
 
 export interface CancelRideParams {

@@ -7,6 +7,9 @@ export const DriverMiddleware = createRoleMiddleware({
   notFoundMessage: "Motorista não encontrado",
   unauthorizedMessage: "Motorista não autorizado",
   inactiveMessage: "Motorista inativo",
-  lookupFn: id => driverRepository.findByIdWithStatus(id),
+  lookupFn: async id => {
+    const result = await driverRepository.findByIdWithStatus(id);
+    return result ? { role: "DRIVER", status: result.status } : null;
+  },
   cache: driverCache,
 });

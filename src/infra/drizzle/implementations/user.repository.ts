@@ -29,7 +29,10 @@ export class UserRepository implements IUserRepository {
   }
 
   async findPasswordById(id: string): Promise<{ id: string; password: string } | null> {
-    const [user] = await db.select({ id: users.id, password: users.password }).from(users).where(and(eq(users.id, id), isNull(users.deletedAt)));
+    const [user] = await db
+      .select({ id: users.id, password: users.password })
+      .from(users)
+      .where(and(eq(users.id, id), isNull(users.deletedAt)));
     return user ?? null;
   }
 
@@ -42,7 +45,7 @@ export class UserRepository implements IUserRepository {
         status: users.status,
       })
       .from(users)
-      .where(eq(users.email, email.toLowerCase()));
+      .where(eq(users.email, email));
     return user ?? null;
   }
 

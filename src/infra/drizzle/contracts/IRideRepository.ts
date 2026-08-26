@@ -92,5 +92,5 @@ export interface IRideRepository {
   findActiveByIdAndDriver(rideId: string, driverId: string): Promise<RideDetailedRow | null>;
   createRideAndLocation(data: CreateRideData): Promise<void>;
   updateToCompleted(rideId: string): Promise<RideDetailedRow>;
-  updateToCancelled(rideId: string): Promise<void>;
+  updateToCancelled(rideId: string, cancelledBy: string, cancelReason?: string | null): Promise<void>;
 }

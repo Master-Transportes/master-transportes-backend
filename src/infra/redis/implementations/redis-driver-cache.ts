@@ -1,6 +1,7 @@
 import { redis } from "@/infra/redis/redis-client";
 import { CACHE_KEYS } from "@/infra/redis/keys-cache";
 import { metrics } from "@/infra/metrics/metrics";
+import { PROFILE_CACHE_TTL_SECONDS } from "@/constants/cache";
 import type { IDriverCache } from "@/infra/redis/contracts/IDriverCache";
 
 export class RedisDriverCache implements IDriverCache {
@@ -17,7 +18,7 @@ export class RedisDriverCache implements IDriverCache {
 
   async setProfile(driverId: string, profile: Record<string, unknown>): Promise<void> {
     const startTime = Date.now();
-    await redis.set(CACHE_KEYS.DRIVER(driverId), JSON.stringify(profile), "EX", 600);
+    await redis.set(CACHE_KEYS.DRIVER(driverId), JSON.stringify(profile), "EX", PROFILE_CACHE_TTL_SECONDS);
     metrics.incCounter("driver_cache_set_total");
     metrics.observeHistogram("driver_cache_operation_duration_ms", Date.now() - startTime);
   }
@@ -33,7 +34,7 @@ export class RedisDriverCache implements IDriverCache {
 
   async setBase(driverId: string, data: { role: string; status: string }): Promise<void> {
     const startTime = Date.now();
-    await redis.set(CACHE_KEYS.DRIVER_BASE(driverId), JSON.stringify(data), "EX", 600);
+    await redis.set(CACHE_KEYS.DRIVER_BASE(driverId), JSON.stringify(data), "EX", PROFILE_CACHE_TTL_SECONDS);
     metrics.incCounter("driver_cache_set_base_total");
     metrics.observeHistogram("driver_cache_operation_duration_ms", Date.now() - startTime);
   }
