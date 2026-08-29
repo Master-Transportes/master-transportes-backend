@@ -25,6 +25,16 @@ export const login = api<SignInDTO, SignInResponse>(
   async payload => driverService.signIn(payload),
 );
 
+export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
+  { expose: true, method: "POST", path: "/driver/register", auth: false },
+  async payload => driverService.register(payload),
+);
+
+export const refresh = api<RefreshDTO, RefreshResponse>(
+  { expose: true, method: "POST", path: "/driver/refresh", auth: false },
+  async ({ refreshToken }) => driverService.refreshSession(refreshToken),
+);
+
 export const me = api<void, DriverProfileResponse>(
   { expose: true, method: "GET", path: "/driver/me", auth: true },
   async () => {
@@ -40,33 +50,6 @@ export const getWallet = api<void, { balanceInCents: number; currency: string }>
       balanceInCents: 15340,
       currency: "BRL",
     };
-  },
-);
-
-export const logout = api<void, { message: string }>(
-  { expose: true, method: "POST", path: "/driver/logout", auth: true },
-  async () => {
-    const { sessionID } = auth.getAuthData()!;
-    await driverService.logout(sessionID);
-    return { message: "Logout realizado com sucesso." };
-  },
-);
-
-export const refresh = api<RefreshDTO, RefreshResponse>(
-  { expose: true, method: "POST", path: "/driver/refresh", auth: false },
-  async ({ refreshToken, sessionId }) => driverService.refreshSession(sessionId, refreshToken),
-);
-
-export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
-  { expose: true, method: "POST", path: "/driver/register", auth: false },
-  async payload => driverService.register(payload),
-);
-
-export const rides = api<void, DriverRideListResponse>(
-  { expose: true, method: "GET", path: "/driver/rides", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.getRides(userID);
   },
 );
 
@@ -94,48 +77,16 @@ export const updateLocation = api<UpdateDriverLocationDTO, void>(
   },
 );
 
-export const acceptOffer = api<AcceptOfferDTO, void>(
-  { expose: true, method: "POST", path: "/driver/offer/accept", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.acceptOffer(userID, payload);
-  },
-);
-
-export const rejectOffer = api<RejectOfferDTO, void>(
-  { expose: true, method: "POST", path: "/driver/offer/reject", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.rejectOffer(userID, payload);
-  },
-);
-
-export const goOnline = api<void, DriverStatusResponse>(
-  { expose: true, method: "POST", path: "/driver/go-online", auth: true },
+export const listRides = api<void, DriverRideListResponse>(
+  { expose: true, method: "GET", path: "/driver/rides", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    return driverService.goOnline(userID);
-  },
-);
-
-export const goOffline = api<void, DriverStatusResponse>(
-  { expose: true, method: "POST", path: "/driver/go-offline", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.goOffline(userID);
-  },
-);
-
-export const status = api<void, DriverStatusResponse>(
-  { expose: true, method: "GET", path: "/driver/status", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.getStatus(userID);
+    return driverService.getRides(userID);
   },
 );
 
 export const getActiveRide = api<void, ActiveRideResponse>(
-  { expose: true, method: "GET", path: "/driver/ride/active", auth: true },
+  { expose: true, method: "GET", path: "/driver/rides/active", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
     return driverService.getActiveRide(userID);
@@ -143,7 +94,7 @@ export const getActiveRide = api<void, ActiveRideResponse>(
 );
 
 export const cancelRide = api<CancelRideParams, void>(
-  { expose: true, method: "DELETE", path: "/driver/:rideId/cancel", auth: true },
+  { expose: true, method: "DELETE", path: "/driver/rides/:rideId", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;
     await driverService.cancelRide(userID, payload);
@@ -151,9 +102,49 @@ export const cancelRide = api<CancelRideParams, void>(
 );
 
 export const completeRide = api<CompleteRideDTO, ActiveRideResponse>(
-  { expose: true, method: "PUT", path: "/driver/:rideId/complete", auth: true },
+  { expose: true, method: "PUT", path: "/driver/rides/:rideId/complete", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;
     return driverService.completeRide(userID, payload);
+  },
+);
+
+export const acceptOffer = api<AcceptOfferDTO, void>(
+  { expose: true, method: "POST", path: "/driver/offers/:offerId/accept", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.acceptOffer(userID, payload);
+  },
+);
+
+export const rejectOffer = api<RejectOfferDTO, void>(
+  { expose: true, method: "POST", path: "/driver/offers/:offerId/reject", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.rejectOffer(userID, payload);
+  },
+);
+
+export const goOnline = api<void, DriverStatusResponse>(
+  { expose: true, method: "POST", path: "/driver/status/online", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.goOnline(userID);
+  },
+);
+
+export const goOffline = api<void, DriverStatusResponse>(
+  { expose: true, method: "POST", path: "/driver/status/offline", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.goOffline(userID);
+  },
+);
+
+export const getStatus = api<void, DriverStatusResponse>(
+  { expose: true, method: "GET", path: "/driver/status", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.getStatus(userID);
   },
 );

@@ -15,12 +15,19 @@ interface RoleMiddlewareOptions {
 
 export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
   middleware({ target: { auth: true } }, async (req, next) => {
-    const { userID } = auth.getAuthData()!;
+    const { userID, role } = auth.getAuthData()!;
+
+    if (role && role !== options.role) {
+      throw APIError.permissionDenied(options.unauthorizedMessage);
+    }
 
     const cached = await options.cache.getBase(userID);
     if (cached) {
       if (cached.role !== options.role) {
         throw APIError.permissionDenied(options.unauthorizedMessage);
+      }
+      if (cached.status !== "ACTIVE") {
+        throw APIError.permissionDenied(options.inactiveMessage);
       }
       return next(req);
     }
@@ -34,6 +41,10 @@ export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
 
     if (dbUser.role !== options.role) {
       throw APIError.permissionDenied(options.unauthorizedMessage);
+    }
+
+    if (dbUser.status !== "ACTIVE") {
+      throw APIError.permissionDenied(options.inactiveMessage);
     }
 
     return next(req);

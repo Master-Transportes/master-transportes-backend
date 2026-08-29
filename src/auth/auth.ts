@@ -1,24 +1,47 @@
 import jwt from "jsonwebtoken";
-import { randomUUID } from "crypto";
-import type { JWTObject } from "@/dto/auth.interface";
+import { randomUUID, createHash, randomBytes } from "crypto";
+import type { AccessTokenPayload } from "@/dto/auth.interface";
+import { ACCESS_TOKEN_TTL_SECONDS } from "@/constants/cache";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 if (!JWT_SECRET) throw new Error("variable JWT_SECRET is missing.");
 
-const THIRTY_MINUTES_IN_S = 1800;
-export const JWT_EXPIRES_IN = THIRTY_MINUTES_IN_S;
+export const JWT_EXPIRES_IN = ACCESS_TOKEN_TTL_SECONDS;
 
-export function generateToken(userJWT: JWTObject): string {
-  return jwt.sign({ ...userJWT, jwtid: randomUUID() }, JWT_SECRET, {
+const ISSUER = "master-transporte";
+
+export function generateToken(payload: { sub: string; sid: string; role: "CLIENT" | "DRIVER" }): string {
+  return jwt.sign({}, JWT_SECRET, {
+    subject: payload.sub,
+    jwtid: randomUUID(),
+    issuer: ISSUER,
+    audience: payload.role === "DRIVER" ? "driver-app" : "client-app",
     expiresIn: JWT_EXPIRES_IN,
   });
 }
 
-export function verifyToken(token: string): JWTObject {
-  try {
-    const payload = jwt.verify(token, JWT_SECRET) as JWTObject;
-    return payload;
-  } catch (error) {
-    throw new Error("Invalid or expired token.");
-  }
+export function verifyToken(token: string): AccessTokenPayload {
+  const decoded = jwt.verify(token, JWT_SECRET, {
+    issuer: ISSUER,
+    audience: ["client-app", "driver-app"],
+  }) as jwt.JwtPayload;
+
+  return {
+    sub: decoded.sub!,
+    sid: decoded.sid ?? (decoded as unknown as { sid: string }).sid ?? "",
+    jti: decoded.jti!,
+    role: (decoded as unknown as { role: "CLIENT" | "DRIVER" }).role ?? "CLIENT",
+    iss: decoded.iss!,
+    aud: Array.isArray(decoded.aud) ? decoded.aud[0] : decoded.aud!,
+    iat: decoded.iat!,
+    exp: decoded.exp!,
+  };
+}
+
+export function generateRefreshToken(): string {
+  return randomBytes(32).toString("hex");
+}
+
+export function hashRefreshToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }

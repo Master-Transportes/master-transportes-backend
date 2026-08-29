@@ -14,19 +14,11 @@ import type {
   ActiveRideResponse,
   PendingRideRequestResponse,
 } from "@/dto/user.interface";
-import type { SignInDTO, SignInResponse, GetMeResponse } from "@/dto/access.interface";
+import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
 
 export const login = api<SignInDTO, SignInResponse>(
-  { expose: true, method: "POST", path: "/client/login", auth: false },
+  { expose: true, method: "POST", path: "/auth/login", auth: false },
   async payload => userService.signIn(payload),
-);
-
-export const me = api<void, GetMeResponse>(
-  { expose: true, method: "GET", path: "/client/me", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return userService.getMe(userID);
-  },
 );
 
 export const register = api<RegisterUserDTO, RegisterAccountResponse>(
@@ -34,11 +26,16 @@ export const register = api<RegisterUserDTO, RegisterAccountResponse>(
   async payload => userService.register(payload),
 );
 
-export const rides = api<void, RideListResponse>(
-  { expose: true, method: "GET", path: "/client/rides", auth: true },
+export const refresh = api<RefreshDTO, RefreshResponse>(
+  { expose: true, method: "POST", path: "/client/refresh", auth: false },
+  async ({ refreshToken }) => userService.refreshSession(refreshToken),
+);
+
+export const me = api<void, GetMeResponse>(
+  { expose: true, method: "GET", path: "/client/me", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    return userService.getRides(userID);
+    return userService.getMe(userID);
   },
 );
 
@@ -58,32 +55,24 @@ export const updatePassword = api<ChangePasswordDTO, void>(
   },
 );
 
+export const listRides = api<void, RideListResponse>(
+  { expose: true, method: "GET", path: "/client/rides", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return userService.getRides(userID);
+  },
+);
+
 export const requestRide = api<RequestRideDTO, RequestRideResponse>(
-  { expose: true, method: "POST", path: "/ride/request", auth: true },
+  { expose: true, method: "POST", path: "/client/rides", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;
     return userService.requestRide(userID, payload);
   },
 );
 
-export const cancelRide = api<CancelRideParams, void>(
-  { expose: true, method: "DELETE", path: "/ride/:rideId/cancel", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await userService.cancelRide(userID, payload);
-  },
-);
-
-export const cancelRideRequest = api<{ rideId: string }, void>(
-  { expose: true, method: "DELETE", path: "/ride/request/:rideId/cancel", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await userService.cancelRideRequest(userID, payload.rideId);
-  },
-);
-
 export const getActiveRide = api<void, ActiveRideResponse>(
-  { expose: true, method: "GET", path: "/ride/active", auth: true },
+  { expose: true, method: "GET", path: "/client/rides/active", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
     return userService.getActiveRide(userID);
@@ -91,9 +80,25 @@ export const getActiveRide = api<void, ActiveRideResponse>(
 );
 
 export const getPendingRideRequest = api<void, PendingRideRequestResponse>(
-  { expose: true, method: "GET", path: "/ride/request/pending", auth: true },
+  { expose: true, method: "GET", path: "/client/rides/pending", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
     return userService.getPendingRideRequest(userID);
+  },
+);
+
+export const cancelRide = api<CancelRideParams, void>(
+  { expose: true, method: "DELETE", path: "/client/rides/:rideId", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await userService.cancelRide(userID, payload);
+  },
+);
+
+export const cancelRideRequest = api<{ rideId: string }, void>(
+  { expose: true, method: "DELETE", path: "/client/rides/:rideId/request", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    await userService.cancelRideRequest(userID, payload.rideId);
   },
 );

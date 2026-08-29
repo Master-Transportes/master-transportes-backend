@@ -1,4 +1,4 @@
-import type { DriverStatus, CancelRideParams } from "./shared.types.ts";
+import type { DriverStatus } from "./shared.types.ts";
 
 export interface UpdateDriverLocationDTO {
   latitude: number;
@@ -60,7 +60,7 @@ export interface DriverStatusResponse {
   online: boolean;
 }
 
-export { CancelRideParams } from "./shared.types.ts";
+export type { CancelRideParams } from "./shared.types.ts";
 
 export interface DriverRideListResponse {
   rides: RideDetailedInfo[];

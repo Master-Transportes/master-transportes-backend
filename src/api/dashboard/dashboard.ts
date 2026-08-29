@@ -9,22 +9,22 @@ import type {
   DashboardActionResponse,
 } from "@/dto/dashboard.interface";
 
-export const users = api<ListUsersParams, PaginatedUsersResponse>(
+export const listUsers = api<ListUsersParams, PaginatedUsersResponse>(
   { expose: true, method: "GET", path: "/dashboard/users", auth: true },
   async params => dashboardService.listUsers(params),
 );
 
-export const usersSystem = api<ListSystemUsersParams, PaginatedUsersResponse>(
-  { expose: true, method: "GET", path: "/dashboard/users-system", auth: true },
+export const listSystemUsers = api<ListSystemUsersParams, PaginatedUsersResponse>(
+  { expose: true, method: "GET", path: "/dashboard/users/system", auth: true },
   async params => dashboardService.listSystemUsers(params),
 );
 
 export const activateUser = api<ActivateUserParams, DashboardActionResponse>(
-  { expose: true, method: "POST", path: "/dashboard/user/:id/activate", auth: true },
+  { expose: true, method: "POST", path: "/dashboard/users/:id/activate", auth: true },
   async ({ id }) => dashboardService.activateUser(id),
 );
 
 export const banUser = api<BanUserParams, DashboardActionResponse>(
-  { expose: true, method: "POST", path: "/dashboard/user/:id/ban", auth: true },
+  { expose: true, method: "POST", path: "/dashboard/users/:id/ban", auth: true },
   async payload => dashboardService.banUser(payload),
 );

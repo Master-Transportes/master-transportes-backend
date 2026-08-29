@@ -1,4 +1,10 @@
-export interface JWTObject {
-  userID: string;
-  sessionID: string;
+export interface AccessTokenPayload {
+  sub: string;
+  sid: string;
+  jti: string;
+  role: "CLIENT" | "DRIVER";
+  iss: string;
+  aud: string;
+  iat: number;
+  exp: number;
 }

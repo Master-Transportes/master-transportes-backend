@@ -1,4 +1,4 @@
-import type { Role, UserStatus, CancelRideParams } from "./shared.types.ts";
+import type { Role, UserStatus } from "./shared.types.ts";
 
 export interface RegisterUserDTO {
   fullName: string;
@@ -72,7 +72,7 @@ export interface RequestRideResponse {
   rideId: string;
 }
 
-export { CancelRideParams } from "./shared.types.ts";
+export type { CancelRideParams } from "./shared.types.ts";
 
 export interface ActiveRideResponse {
   ride: RideWithDriverInfo | null;

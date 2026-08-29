@@ -4,9 +4,10 @@ import { validateOrThrow } from "@/validations/schema-validator";
 import { UpdateProfileSchema, ChangePasswordSchema } from "@/validations/dto/user.validate";
 import type { IUserRepository, UserRow } from "@/repositories/contracts/IUserRepository";
 import type { IUserCache } from "@/cache/contracts/IUserCache";
+import type { ISessionStore } from "@/cache/contracts/ISessionStore";
 import type { UserProfileResponse, UpdateProfileDTO, ChangePasswordDTO } from "@/dto/user.interface";
 import { userRepository } from "@/repositories";
-import { userCache } from "@/cache";
+import { userCache, sessionStore } from "@/cache";
 import { isPgUniqueViolation } from "@/utils/database";
 
 function toProfile(user: UserRow): UserProfileResponse {
@@ -23,6 +24,7 @@ export class ProfileService {
   constructor(
     private readonly userRepo: IUserRepository,
     private readonly userCacheService: IUserCache,
+    private readonly sessionStore_: ISessionStore,
   ) {}
 
   async getProfile(userID: string): Promise<UserProfileResponse> {
@@ -74,8 +76,11 @@ export class ProfileService {
     const hashedPassword = await hash(validated.newPassword, 10);
     await this.userRepo.updatePassword(userID, hashedPassword);
 
-    await this.userCacheService.invalidate(userID);
+    await Promise.all([
+      this.userCacheService.invalidate(userID),
+      this.sessionStore_.revokeAll(userID),
+    ]);
   }
 }
 
-export const profileService = new ProfileService(userRepository, userCache);
+export const profileService = new ProfileService(userRepository, userCache, sessionStore);

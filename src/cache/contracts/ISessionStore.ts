@@ -1,11 +1,11 @@
-import type { Session } from "@/dto/session.interface";
+import type { SessionRow } from "@/infra/database/schema";
 
 export interface ISessionStore {
-  create(input: { userId: string; role: string }): Promise<{ sessionId: string; refreshToken: string }>;
-  get(sessionId: string): Promise<Session | null>;
-  refresh(sessionId: string, oldRefreshToken: string): Promise<{ refreshToken: string; userId: string; role: string } | null>;
+  create(input: { userId: string; userType: "CLIENT" | "DRIVER" }): Promise<{ sessionId: string; refreshToken: string }>;
+  get(sessionId: string): Promise<SessionRow | null>;
+  findByRefreshToken(refreshToken: string): Promise<SessionRow | null>;
+  rotateRefreshToken(sessionId: string, oldRefreshToken: string): Promise<string | null>;
   revoke(sessionId: string): Promise<void>;
   revokeAll(userId: string): Promise<void>;
-  getUserSessionIds(userId: string): Promise<string[]>;
-  count(userId: string): Promise<number>;
+  updateLastSeenAt(sessionId: string): Promise<void>;
 }

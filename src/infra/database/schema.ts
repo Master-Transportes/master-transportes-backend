@@ -190,6 +190,31 @@ export const rideLocations = pgTable(
   ],
 );
 
+export const SESSION_USER_TYPES = ["CLIENT", "DRIVER"] as const;
+export type SessionUserType = (typeof SESSION_USER_TYPES)[number];
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull(),
+    userType: varchar("user_type", { length: 20 }).$type<SessionUserType>().notNull(),
+    refreshTokenHash: varchar("refresh_token_hash", { length: 64 }).notNull(),
+    deviceId: varchar("device_id", { length: 255 }),
+    userAgent: varchar("user_agent", { length: 500 }),
+    ipAddress: varchar("ip_address", { length: 45 }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    revokedAt: timestamp("revoked_at"),
+  },
+  table => [
+    index("sessions_user_id_idx").on(table.userId),
+    index("sessions_refresh_token_hash_idx").on(table.refreshTokenHash),
+    index("sessions_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
 export const areas = pgTable(
   "areas",
   {

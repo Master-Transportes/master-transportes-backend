@@ -1,3 +1,5 @@
-export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
-export const RIDE_REQUEST_LOCK_TTL_SECONDS = 600;
+export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
+export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const SESSION_CACHE_TTL_SECONDS = 15 * 60;
 export const PROFILE_CACHE_TTL_SECONDS = 600;
+export const RIDE_REQUEST_LOCK_TTL_SECONDS = 600;

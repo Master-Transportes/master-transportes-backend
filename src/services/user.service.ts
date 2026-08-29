@@ -22,7 +22,6 @@ import type {
   PendingRideRequestResponse,
 } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
-import type { Role } from "@/infra/database/schema";
 import type { IUserRepository } from "@/repositories/contracts/IUserRepository";
 import type { ISessionStore } from "@/cache/contracts/ISessionStore";
 import type { IUserCache } from "@/cache/contracts/IUserCache";
@@ -76,21 +75,21 @@ export class UserService {
 
   async signIn(payload: SignInDTO): Promise<SignInResponse> {
     const validated = validateOrThrow(SignInSchema, payload);
-    const { login, password } = validated;
+    const { email, password } = validated;
 
-    const user = await this.userRepo.findByEmail(login.toLowerCase());
+    const user = await this.userRepo.findByEmail(email.toLowerCase());
     if (!user) throw APIError.unauthenticated("E-mail ou senha inválidos.");
     const validPassword = await compare(password, user.password);
     if (!validPassword) throw APIError.unauthenticated("E-mail ou senha inválidos.");
 
     const { sessionId, refreshToken } = await this.sessionStore.create({
       userId: user.id,
-      role: user.role as Role,
+      userType: "CLIENT",
     });
 
-    const accessToken = generateToken({ userID: user.id, sessionID: sessionId });
+    const accessToken = generateToken({ sub: user.id, sid: sessionId, role: "CLIENT" });
 
-    return { accessToken, refreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
+    return { accessToken, refreshToken, expiresIn: JWT_EXPIRES_IN };
   }
 
   async getMe(userID: string): Promise<GetMeResponse> {
@@ -125,17 +124,27 @@ export class UserService {
     await this.sessionStore.revokeAll(userId);
   }
 
-  async refreshSession(sessionId: string, refreshToken: string): Promise<RefreshResponse> {
-    validateOrThrow(RefreshSchema, { refreshToken, sessionId });
+  async refreshSession(refreshToken: string): Promise<RefreshResponse> {
+    const validated = validateOrThrow(RefreshSchema, { refreshToken });
 
-    const result = await this.sessionStore.refresh(sessionId, refreshToken);
-    if (!result) {
-      throw APIError.unauthenticated("Sessão não encontrada, expirada ou token inválido.");
+    const session = await this.sessionStore.findByRefreshToken(validated.refreshToken);
+    if (!session) {
+      throw APIError.unauthenticated("Refresh token inválido ou expirado.");
     }
 
-    const { refreshToken: newRefreshToken, userId } = result;
+    if (session.revokedAt) {
+      throw APIError.unauthenticated("Sessão revogada.");
+    }
 
-    const user = await this.userRepo.findById(userId);
+    const newRefreshToken = await this.sessionStore.rotateRefreshToken(
+      session.id,
+      validated.refreshToken,
+    );
+    if (!newRefreshToken) {
+      throw APIError.unauthenticated("Falha ao rotacionar token.");
+    }
+
+    const user = await this.userRepo.findById(session.userId);
     if (!user) {
       throw APIError.notFound("Usuário não encontrado.");
     }
@@ -143,13 +152,15 @@ export class UserService {
       throw APIError.permissionDenied("Usuário inativo.");
     }
 
-    const accessToken = generateToken({ userID: userId, sessionID: sessionId });
+    const accessToken = generateToken({ sub: session.userId, sid: session.id, role: "CLIENT" });
 
-    return { accessToken, refreshToken: newRefreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
+    return { accessToken, refreshToken: newRefreshToken, expiresIn: JWT_EXPIRES_IN };
   }
 
   async getUserSessions(userId: string): Promise<string[]> {
-    return this.sessionStore.getUserSessionIds(userId);
+    const { redis } = await import("@/infra/cache/redis-client");
+    const { CACHE_KEYS } = await import("@/infra/cache/keys-cache");
+    return redis.smembers(CACHE_KEYS.USER_SESSIONS(userId));
   }
 
   async getProfile(userID: string): Promise<UserProfileResponse> {

@@ -79,9 +79,9 @@ export class DriverService {
 
   async signIn(payload: SignInDTO): Promise<SignInResponse> {
     const validated = validateOrThrow(SignInSchema, payload);
-    const { login, password } = validated;
+    const { email, password } = validated;
 
-    const driver = await this.driverRepo.findByEmail(login.toLowerCase());
+    const driver = await this.driverRepo.findByEmail(email.toLowerCase());
     if (!driver) throw APIError.unauthenticated("E-mail ou senha inválidos.");
 
     const valid = await compare(password, driver.password);
@@ -89,12 +89,12 @@ export class DriverService {
 
     const { sessionId, refreshToken } = await this.sessionStore.create({
       userId: driver.id,
-      role: "DRIVER",
+      userType: "DRIVER",
     });
 
-    const accessToken = generateToken({ userID: driver.id, sessionID: sessionId });
+    const accessToken = generateToken({ sub: driver.id, sid: sessionId, role: "DRIVER" });
 
-    return { accessToken, refreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
+    return { accessToken, refreshToken, expiresIn: JWT_EXPIRES_IN };
   }
 
   async getMe(driverId: string): Promise<DriverProfileResponse> {
@@ -118,21 +118,23 @@ export class DriverService {
     await this.sessionStore.revokeAll(driverId);
   }
 
-  async refreshSession(sessionId: string, refreshToken: string): Promise<RefreshResponse> {
-    validateOrThrow(RefreshSchema, { refreshToken, sessionId });
+  async refreshSession(refreshToken: string): Promise<RefreshResponse> {
+    const validated = validateOrThrow(RefreshSchema, { refreshToken });
 
-    const result = await this.sessionStore.refresh(sessionId, refreshToken);
-    if (!result) {
-      throw APIError.unauthenticated("Sessão não encontrada, expirada ou token inválido.");
+    const session = await this.sessionStore.findByRefreshToken(validated.refreshToken);
+    if (!session) {
+      throw APIError.unauthenticated("Refresh token inválido ou expirado.");
     }
 
-    const { refreshToken: newRefreshToken, userId, role } = result;
+    if (session.revokedAt) {
+      throw APIError.unauthenticated("Sessão revogada.");
+    }
 
-    if (role !== "DRIVER") {
+    if (session.userType !== "DRIVER") {
       throw APIError.permissionDenied("Sessão não pertence a um motorista.");
     }
 
-    const driver = await this.driverRepo.findByIdWithStatus(userId);
+    const driver = await this.driverRepo.findByIdWithStatus(session.userId);
     if (!driver) {
       throw APIError.notFound("Motorista não encontrado.");
     }
@@ -140,9 +142,17 @@ export class DriverService {
       throw APIError.permissionDenied("Motorista não está aprovado.");
     }
 
-    const accessToken = generateToken({ userID: userId, sessionID: sessionId });
+    const newRefreshToken = await this.sessionStore.rotateRefreshToken(
+      session.id,
+      validated.refreshToken,
+    );
+    if (!newRefreshToken) {
+      throw APIError.unauthenticated("Falha ao rotacionar token.");
+    }
 
-    return { accessToken, refreshToken: newRefreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
+    const accessToken = generateToken({ sub: session.userId, sid: session.id, role: "DRIVER" });
+
+    return { accessToken, refreshToken: newRefreshToken, expiresIn: JWT_EXPIRES_IN };
   }
 
   async getRides(driverId: string): Promise<{ rides: RideDetailedInfo[] }> {
@@ -189,6 +199,8 @@ export class DriverService {
 
     const hashed = await hash(newPassword, 10);
     await this.driverRepo.updatePassword(driverId, hashed);
+
+    await this.sessionStore.revokeAll(driverId);
   }
 
   async updateLocation(userID: string, payload: UpdateDriverLocationDTO): Promise<void> {

@@ -1,26 +1,23 @@
 import type { UserStatus } from "./shared.types.ts";
 
 export interface SignInDTO {
-  login: string;
+  email: string;
   password: string;
 }
 
 export interface SignInResponse {
   accessToken: string;
   refreshToken: string;
-  sessionId: string;
   expiresIn: number;
 }
 
 export interface RefreshDTO {
   refreshToken: string;
-  sessionId: string;
 }
 
 export interface RefreshResponse {
   accessToken: string;
   refreshToken: string;
-  sessionId: string;
   expiresIn: number;
 }
 
