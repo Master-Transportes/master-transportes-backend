@@ -1,5 +1,4 @@
-import type { RideDetailedRow } from "@/infra/drizzle/contracts/IRideRepository";
-import type { DriverStatus } from "./shared.types.ts";
+import type { DriverStatus, CancelRideParams } from "./shared.types.ts";
 
 export interface UpdateDriverLocationDTO {
   latitude: number;
@@ -23,15 +22,48 @@ export interface CompleteRideDTO {
 }
 
 export interface ActiveRideResponse {
-  ride: RideDetailedRow | null;
+  ride: RideDetailedInfo | null;
+}
+
+export interface RideDetailedInfo {
+  id: string;
+  clientId: string;
+  driverId: string;
+  origin: {
+    name: string;
+    lat: number;
+    lng: number;
+    h3: string;
+  };
+  destination: {
+    name: string;
+    lat: number;
+    lng: number;
+    h3: string;
+  };
+  regionId: string;
+  municipalityId: string;
+  status: string;
+  startedAt: Date | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+  price: number | null;
+  distance: number | null;
+  duration: number | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
+  createdAt: Date;
+  deletedAt: Date | null;
 }
 
 export interface DriverStatusResponse {
   online: boolean;
 }
 
-export interface CancelRideParams {
-  rideId: string;
+export { CancelRideParams } from "./shared.types.ts";
+
+export interface DriverRideListResponse {
+  rides: RideDetailedInfo[];
 }
 
 export interface DriverProfileResponse {

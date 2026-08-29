@@ -2,12 +2,12 @@ import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
 import { validateOrThrow } from "@/validations/schema-validator";
 import { UpdateProfileSchema, ChangePasswordSchema } from "@/validations/dto/user.validate";
-import type { IUserRepository, UserRow } from "@/infra/drizzle/contracts/IUserRepository";
-import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
+import type { IUserRepository, UserRow } from "@/repositories/contracts/IUserRepository";
+import type { IUserCache } from "@/cache/contracts/IUserCache";
 import type { UserProfileResponse, UpdateProfileDTO, ChangePasswordDTO } from "@/dto/user.interface";
-import { userRepository } from "@/infra/drizzle";
-import { userCache } from "@/infra/redis";
-import { isPgUniqueViolation } from "@/constants/database";
+import { userRepository } from "@/repositories";
+import { userCache } from "@/cache";
+import { isPgUniqueViolation } from "@/utils/database";
 
 function toProfile(user: UserRow): UserProfileResponse {
   return {

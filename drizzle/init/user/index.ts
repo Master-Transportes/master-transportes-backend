@@ -1,7 +1,7 @@
 import { hash } from "bcrypt";
 import { eq } from "drizzle-orm";
-import { db } from "@/infra/drizzle/drizzle";
-import { users, drivers } from "@/infra/drizzle/schema";
+import { db } from "@/infra/database/drizzle";
+import { users, drivers } from "@/infra/database/schema";
 
 // ---------- DADOS DE EXEMPLO ----------
 const userSeedData = [

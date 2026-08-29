@@ -5,7 +5,6 @@ import type {
   ChangePasswordDTO,
   RegisterAccountResponse,
   RegisterDriverDTO,
-  RideListResponse,
   UpdateProfileDTO,
 } from "@/dto/user.interface";
 import type {
@@ -17,6 +16,7 @@ import type {
   ActiveRideResponse,
   DriverStatusResponse,
   DriverProfileResponse,
+  DriverRideListResponse,
 } from "@/dto/driver.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
 
@@ -62,7 +62,7 @@ export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   async payload => driverService.register(payload),
 );
 
-export const rides = api<void, RideListResponse>(
+export const rides = api<void, DriverRideListResponse>(
   { expose: true, method: "GET", path: "/driver/rides", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;

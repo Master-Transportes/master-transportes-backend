@@ -3,12 +3,11 @@ import { APIError } from "encore.dev/api";
 import { hashSync } from "bcrypt";
 import { like } from "drizzle-orm";
 import { userService } from "@/services/user.service";
-import { sessionStore } from "@/infra/redis";
-import { redis } from "@/infra/redis";
-import { db } from "@/infra/drizzle/drizzle";
-import { users } from "@/infra/drizzle/schema";
+import { sessionStore } from "@/cache";
+import { redis, CACHE_KEYS } from "@/infra/cache";
+import { db } from "@/infra/database/drizzle";
+import { users } from "@/infra/database/schema";
 import { verifyToken } from "@/auth/auth";
-import { CACHE_KEYS } from "@/infra/redis";
 import type { SignInDTO } from "@/dto/access.interface";
 import type { RegisterUserDTO } from "@/dto/user.interface";
 

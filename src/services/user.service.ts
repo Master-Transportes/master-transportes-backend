@@ -11,7 +11,6 @@ import {
   UpdateProfileSchema,
 } from "@/validations/dto/user.validate";
 import type {
-  CancelRideParams,
   ChangePasswordDTO,
   RegisterUserDTO,
   UpdateProfileDTO,
@@ -23,25 +22,26 @@ import type {
   PendingRideRequestResponse,
 } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
-import type { Role } from "@/infra/drizzle/schema";
-import type { IUserRepository } from "@/infra/drizzle/contracts/IUserRepository";
-import type { ISessionStore } from "@/infra/redis/contracts/ISessionStore";
-import type { IUserCache } from "@/infra/redis/contracts/IUserCache";
-import type { IRideRepository } from "@/infra/drizzle/contracts/IRideRepository";
-import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStore";
-import type { IDriverStatusStore } from "@/infra/redis/contracts/IDriverStatusStore";
-import type { IRideEventPublisher } from "@/infra/rabbitmq/contracts/IRideEventPublisher";
+import type { Role } from "@/infra/database/schema";
+import type { IUserRepository } from "@/repositories/contracts/IUserRepository";
+import type { ISessionStore } from "@/cache/contracts/ISessionStore";
+import type { IUserCache } from "@/cache/contracts/IUserCache";
+import type { IRideRepository } from "@/repositories/contracts/IRideRepository";
+import type { IRideRequestStore } from "@/cache/contracts/IRideRequestStore";
+import type { IDriverStatusStore } from "@/cache/contracts/IDriverStatusStore";
+import type { IRideEventPublisher } from "@/messaging/contracts/IRideEventPublisher";
 import type { ProfileService } from "@/services/profile.service";
-import { userRepository } from "@/infra/drizzle";
-import { rideRepository } from "@/infra/drizzle";
-import { rideRequestStore } from "@/infra/redis";
-import { driverStatusStore } from "@/infra/redis";
-import { rideEventPublisher } from "@/infra/rabbitmq";
-import { sessionStore } from "@/infra/redis";
-import { userCache } from "@/infra/redis";
+import { userRepository } from "@/repositories";
+import { rideRepository } from "@/repositories";
+import { rideRequestStore } from "@/cache";
+import { driverStatusStore } from "@/cache";
+import { rideEventPublisher } from "@/messaging";
+import { sessionStore } from "@/cache";
+import { userCache } from "@/cache";
 import { profileService } from "@/services/profile.service";
 import { randomUUID } from "crypto";
-import { isPgUniqueViolation } from "@/constants/database";
+import { isPgUniqueViolation } from "@/utils/database";
+import { ACTIVE_RIDE_STATUSES } from "@/constants/ride";
 
 export class UserService {
   constructor(
@@ -127,7 +127,13 @@ export class UserService {
 
   async refreshSession(sessionId: string, refreshToken: string): Promise<RefreshResponse> {
     validateOrThrow(RefreshSchema, { refreshToken, sessionId });
-    const { refreshToken: newRefreshToken, userId } = await this.sessionStore.refresh(sessionId, refreshToken);
+
+    const result = await this.sessionStore.refresh(sessionId, refreshToken);
+    if (!result) {
+      throw APIError.unauthenticated("Sessão não encontrada, expirada ou token inválido.");
+    }
+
+    const { refreshToken: newRefreshToken, userId } = result;
 
     const user = await this.userRepo.findById(userId);
     if (!user) {
@@ -151,12 +157,22 @@ export class UserService {
   }
 
   async getRides(userID: string): Promise<{ rides: RideSummary[] }> {
-    const result = await this.rideRepo.findByClientId(userID);
-    return { rides: result };
+    const rows = await this.rideRepo.findByClientId(userID);
+    const rides: RideSummary[] = rows.map(row => ({
+      id: row.id,
+      origin: { name: row.origin.name, lat: row.origin.lat, lng: row.origin.lng },
+      destination: { name: row.destination.name, lat: row.destination.lat, lng: row.destination.lng },
+      status: row.status,
+      startedAt: row.startedAt,
+      completedAt: row.completedAt,
+      cancelledAt: row.cancelledAt,
+      createdAt: row.createdAt,
+    }));
+    return { rides };
   }
 
   async getActiveRide(passengerId: string): Promise<ActiveRideResponse> {
-    const ride = await this.rideRepo.findActiveByClientDetailed(passengerId);
+    const ride = await this.rideRepo.findActiveByClientDetailed(passengerId, [...ACTIVE_RIDE_STATUSES]);
     return { ride };
   }
 
@@ -174,7 +190,7 @@ export class UserService {
   }
 
   async requestRide(passengerId: string, payload: RequestRideDTO): Promise<RequestRideResponse> {
-    const active = await this.rideRepo.findActiveByClientId(passengerId);
+    const active = await this.rideRepo.findActiveByClientId(passengerId, [...ACTIVE_RIDE_STATUSES]);
     if (active) {
       throw APIError.failedPrecondition("Você já possui uma corrida em andamento.");
     }
@@ -197,11 +213,10 @@ export class UserService {
     return { rideId };
   }
 
-  async cancelRide(passengerId: string, payload: CancelRideParams): Promise<void> {
+  async cancelRide(passengerId: string, payload: { rideId: string }): Promise<void> {
     const { rideId } = validateOrThrow(CancelRideSchema, payload);
 
-    // Agora só cancela se a corrida já estiver no banco (aceita/em andamento)
-    const ride = await this.rideRepo.findActiveByIdAndClient(rideId, passengerId);
+    const ride = await this.rideRepo.findActiveByIdAndClient(rideId, passengerId, [...ACTIVE_RIDE_STATUSES]);
     if (!ride) {
       throw APIError.notFound("Corrida não encontrada ou não está ativa.");
     }
@@ -211,7 +226,6 @@ export class UserService {
       await this.driverStatusStore.setAvailable(ride.driverId);
     }
 
-    // Libera qualquer lock residual (se ainda existir, por segurança)
     await this.rideRequestStore.release(passengerId);
 
     await this.rideEventPublisher.publishRideCancelled({
@@ -222,7 +236,6 @@ export class UserService {
   }
 
   async cancelRideRequest(passengerId: string, rideId: string): Promise<void> {
-    // Verifica se existe um lock de requisição ativa para esse passageiro
     const lockedRideId = await this.rideRequestStore.getLockedRideId(passengerId);
     if (!lockedRideId) {
       throw APIError.notFound("Nenhuma solicitação de corrida ativa encontrada.");
@@ -231,10 +244,8 @@ export class UserService {
       throw APIError.notFound("O ID da corrida não corresponde à solicitação ativa.");
     }
 
-    // Libera o lock, permitindo que o passageiro faça nova solicitação
     await this.rideRequestStore.release(passengerId);
 
-    // Publica o evento de cancelamento (o matching-service irá cancelar o estado no Redis)
     await this.rideEventPublisher.publishRideCancelled({
       rideId,
       passengerId,

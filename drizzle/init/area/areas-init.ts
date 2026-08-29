@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import { sql } from "drizzle-orm";
-import { db } from "@/infra/drizzle/drizzle";
+import { db } from "@/infra/database/drizzle";
 import { randomUUID } from "crypto";
 
 // Interface completa para seu JSON do Amazonas

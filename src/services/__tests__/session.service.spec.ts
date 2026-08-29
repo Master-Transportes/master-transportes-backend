@@ -2,10 +2,10 @@ import { describe, beforeAll, afterAll, beforeEach, afterEach, expect, it } from
 import { APIError } from "encore.dev/api";
 import { hashSync } from "bcrypt";
 import { eq, like } from "drizzle-orm";
-import { sessionStore, redis } from "@/infra/redis";
-import { db } from "@/infra/drizzle/drizzle";
-import { users } from "@/infra/drizzle/schema";
-import { CACHE_KEYS } from "@/infra/redis";
+import { sessionStore } from "@/cache";
+import { redis, CACHE_KEYS } from "@/infra/cache";
+import { db } from "@/infra/database/drizzle";
+import { users } from "@/infra/database/schema";
 
 const TEST_PREFIX = `session-test-${Date.now()}`;
 let testUserId: string;

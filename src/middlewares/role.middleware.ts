@@ -1,6 +1,6 @@
 import { APIError, middleware } from "encore.dev/api";
 import * as auth from "~encore/auth";
-import type { IBaseCache } from "@/infra/redis/contracts/IBaseCache";
+import type { IBaseCache } from "@/cache/contracts/IBaseCache";
 
 type LookupFn = (id: string) => Promise<{ role: string; status: string } | null>;
 

@@ -1,5 +1,5 @@
 import { verifyToken } from "@/auth/auth";
-import { Gateway, APIError } from "encore.dev/api";
+import { APIError } from "encore.dev/api";
 import { authHandler } from "encore.dev/auth";
 import { Header } from "encore.dev/api";
 
@@ -27,8 +27,4 @@ export const auth = authHandler<AuthParams, AuthData>(async params => {
   } catch (error) {
     throw APIError.unauthenticated("Invalid or expired token.");
   }
-});
-
-export const gateway = new Gateway({
-  authHandler: auth,
 });

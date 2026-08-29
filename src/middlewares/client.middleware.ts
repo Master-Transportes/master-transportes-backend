@@ -1,6 +1,6 @@
 import { createRoleMiddleware } from "./role.middleware";
-import { userRepository } from "@/infra/drizzle";
-import { userCache } from "@/infra/redis";
+import { userRepository } from "@/repositories";
+import { userCache } from "@/cache";
 
 export const ClientMiddleware = createRoleMiddleware({
   role: "CLIENT",

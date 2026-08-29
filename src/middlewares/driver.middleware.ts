@@ -1,6 +1,6 @@
 import { createRoleMiddleware } from "./role.middleware";
-import { driverRepository } from "@/infra/drizzle";
-import { driverCache } from "@/infra/redis";
+import { driverRepository } from "@/repositories";
+import { driverCache } from "@/cache";
 
 export const DriverMiddleware = createRoleMiddleware({
   role: "DRIVER",

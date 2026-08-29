@@ -2,7 +2,7 @@ import { APIError } from "encore.dev/api";
 import { hash, compare } from "bcrypt";
 import { generateToken, JWT_EXPIRES_IN } from "@/auth/auth";
 import { validateOrThrow } from "@/validations/schema-validator";
-import { SignInSchema } from "@/validations/dto/access.validate";
+import { SignInSchema, RefreshSchema } from "@/validations/dto/access.validate";
 import {
   AcceptOfferSchema,
   RejectOfferSchema,
@@ -14,24 +14,24 @@ import {
   UpdateDriverProfileSchema,
 } from "@/validations/dto/driver.validate";
 import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO } from "@/dto/user.interface";
-import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
-import type { IDriverRepository } from "@/infra/drizzle/contracts/IDriverRepository";
-import type { DriverProfileResponse } from "@/dto/driver.interface";
-import type { IRideRepository, RideDetailedRow } from "@/infra/drizzle/contracts/IRideRepository";
-import type { ISessionStore } from "@/infra/redis/contracts/ISessionStore";
-import type { IDriverCache } from "@/infra/redis/contracts/IDriverCache";
-import type { IDriverLocationCache } from "@/infra/redis/contracts/IDriverLocationCache";
-import type { IDriverStatusStore } from "@/infra/redis/contracts/IDriverStatusStore";
-import type { IRideRequestStore } from "@/infra/redis/contracts/IRideRequestStore";
-import type { IRideEventPublisher } from "@/infra/rabbitmq/contracts/IRideEventPublisher";
-import { driverRepository } from "@/infra/drizzle";
-import { rideRepository } from "@/infra/drizzle";
-import { sessionStore } from "@/infra/redis";
-import { driverCache } from "@/infra/redis";
-import { driverLocationCache } from "@/infra/redis";
-import { driverStatusStore } from "@/infra/redis";
-import { rideRequestStore } from "@/infra/redis";
-import { rideEventPublisher } from "@/infra/rabbitmq";
+import type { SignInDTO, SignInResponse, RefreshResponse } from "@/dto/access.interface";
+import type { IDriverRepository } from "@/repositories/contracts/IDriverRepository";
+import type { DriverProfileResponse, RideDetailedInfo } from "@/dto/driver.interface";
+import type { IRideRepository } from "@/repositories/contracts/IRideRepository";
+import type { ISessionStore } from "@/cache/contracts/ISessionStore";
+import type { IDriverCache } from "@/cache/contracts/IDriverCache";
+import type { IDriverLocationCache } from "@/cache/contracts/IDriverLocationCache";
+import type { IDriverStatusStore } from "@/cache/contracts/IDriverStatusStore";
+import type { IRideRequestStore } from "@/cache/contracts/IRideRequestStore";
+import type { IRideEventPublisher } from "@/messaging/contracts/IRideEventPublisher";
+import { driverRepository } from "@/repositories";
+import { rideRepository } from "@/repositories";
+import { sessionStore } from "@/cache";
+import { driverCache } from "@/cache";
+import { driverLocationCache } from "@/cache";
+import { driverStatusStore } from "@/cache";
+import { rideRequestStore } from "@/cache";
+import { rideEventPublisher } from "@/messaging";
 import type { UpdateDriverLocationDTO } from "@/dto/driver.interface";
 import type {
   AcceptOfferDTO,
@@ -42,8 +42,8 @@ import type {
   DriverStatusResponse,
 } from "@/dto/driver.interface";
 import { haversineDistance } from "@/utils/geo";
-import { isPgUniqueViolation } from "@/constants/database";
-import { COMPLETION_RADIUS_METERS } from "@/constants/ride";
+import { isPgUniqueViolation } from "@/utils/database";
+import { COMPLETION_RADIUS_METERS, ACTIVE_RIDE_STATUSES } from "@/constants/ride";
 
 export class DriverService {
   constructor(
@@ -119,7 +119,14 @@ export class DriverService {
   }
 
   async refreshSession(sessionId: string, refreshToken: string): Promise<RefreshResponse> {
-    const { refreshToken: newRefreshToken, userId, role } = await this.sessionStore.refresh(sessionId, refreshToken);
+    validateOrThrow(RefreshSchema, { refreshToken, sessionId });
+
+    const result = await this.sessionStore.refresh(sessionId, refreshToken);
+    if (!result) {
+      throw APIError.unauthenticated("Sessão não encontrada, expirada ou token inválido.");
+    }
+
+    const { refreshToken: newRefreshToken, userId, role } = result;
 
     if (role !== "DRIVER") {
       throw APIError.permissionDenied("Sessão não pertence a um motorista.");
@@ -138,15 +145,29 @@ export class DriverService {
     return { accessToken, refreshToken: newRefreshToken, sessionId, expiresIn: JWT_EXPIRES_IN };
   }
 
-  async getProfile(driverId: string): Promise<DriverProfileResponse> {
-    const profile = await this.driverRepo.findById(driverId);
-    if (!profile) throw APIError.notFound("Motorista não encontrado.");
-    return profile;
-  }
-
-  async getRides(driverId: string): Promise<{ rides: RideDetailedRow[] }> {
-    const result = await this.rideRepo.findByDriverId(driverId);
-    return { rides: result };
+  async getRides(driverId: string): Promise<{ rides: RideDetailedInfo[] }> {
+    const rows = await this.rideRepo.findByDriverId(driverId);
+    const rides: RideDetailedInfo[] = rows.map(row => ({
+      id: row.id,
+      clientId: row.clientId,
+      driverId: row.driverId,
+      origin: row.origin,
+      destination: row.destination,
+      regionId: row.regionId,
+      municipalityId: row.municipalityId,
+      status: row.status,
+      startedAt: row.startedAt,
+      completedAt: row.completedAt,
+      cancelledAt: row.cancelledAt,
+      price: row.price,
+      distance: row.distance,
+      duration: row.duration,
+      cancelledBy: row.cancelledBy,
+      cancelReason: row.cancelReason,
+      createdAt: row.createdAt,
+      deletedAt: row.deletedAt,
+    }));
+    return { rides };
   }
 
   async updateProfile(driverId: string, payload: UpdateProfileDTO): Promise<DriverProfileResponse> {
@@ -186,7 +207,7 @@ export class DriverService {
   }
 
   async getActiveRide(driverId: string): Promise<ActiveRideResponse> {
-    const ride = await this.rideRepo.findActiveByDriverId(driverId);
+    const ride = await this.rideRepo.findActiveByDriverId(driverId, [...ACTIVE_RIDE_STATUSES]);
     return { ride };
   }
 
@@ -221,7 +242,7 @@ export class DriverService {
 
   async cancelRide(driverId: string, payload: CancelRideParams): Promise<void> {
     const { rideId } = validateOrThrow(CancelRideSchema, payload);
-    const ride = await this.rideRepo.findActiveByIdAndDriver(rideId, driverId);
+    const ride = await this.rideRepo.findActiveByIdAndDriver(rideId, driverId, [...ACTIVE_RIDE_STATUSES]);
     if (!ride) {
       throw APIError.notFound("Corrida não encontrada ou não está ativa.");
     }
@@ -239,7 +260,7 @@ export class DriverService {
 
   async completeRide(driverId: string, payload: CompleteRideDTO): Promise<ActiveRideResponse> {
     const { rideId, latitude, longitude } = validateOrThrow(CompleteRideSchema, payload);
-    const ride = await this.rideRepo.findActiveByIdAndDriver(rideId, driverId);
+    const ride = await this.rideRepo.findActiveByIdAndDriver(rideId, driverId, [...ACTIVE_RIDE_STATUSES]);
     if (!ride) {
       throw APIError.notFound("Corrida não encontrada ou não está ativa.");
     }
@@ -253,6 +274,9 @@ export class DriverService {
     }
 
     const updated = await this.rideRepo.updateToCompleted(rideId);
+    if (!updated) {
+      throw APIError.notFound("Corrida não encontrada após a conclusão.");
+    }
 
     await Promise.all([this.driverStatusStore.setAvailable(driverId), this.rideRequestStore.release(ride.clientId)]);
 
