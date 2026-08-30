@@ -1,6 +1,7 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { userService } from "@/services/user.service";
+import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
 import type {
   CancelRideParams,
   ChangePasswordDTO,
@@ -18,7 +19,10 @@ import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse, GetMeRespo
 
 export const login = api<SignInDTO, SignInResponse>(
   { expose: true, method: "POST", path: "/auth/login", auth: false },
-  async payload => userService.signIn(payload),
+  async payload => {
+    const meta = getRequestMetadata();
+    return userService.signIn(payload, meta);
+  },
 );
 
 export const register = api<RegisterUserDTO, RegisterAccountResponse>(

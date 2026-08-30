@@ -1,6 +1,7 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { driverService } from "@/services/driver.service";
+import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
 import type {
   ChangePasswordDTO,
   RegisterAccountResponse,
@@ -22,12 +23,15 @@ import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/d
 
 export const login = api<SignInDTO, SignInResponse>(
   { expose: true, method: "POST", path: "/driver/login", auth: false },
-  async payload => driverService.signIn(payload),
+  async (payload) => {
+    const meta = getRequestMetadata();
+    return driverService.signIn(payload, meta);
+  },
 );
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
-  async payload => driverService.register(payload),
+  async (payload) => driverService.register(payload),
 );
 
 export const refresh = api<RefreshDTO, RefreshResponse>(

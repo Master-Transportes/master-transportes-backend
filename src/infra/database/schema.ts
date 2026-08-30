@@ -215,6 +215,9 @@ export const sessions = pgTable(
   ],
 );
 
+export type SessionRow = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
+
 export const areas = pgTable(
   "areas",
   {

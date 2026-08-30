@@ -4,20 +4,17 @@ import { SESSION_CACHE_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from "@/constant
 import { generateRefreshToken, hashRefreshToken } from "@/auth/auth";
 import type { SessionRow, NewSession } from "@/infra/database/schema";
 import type { ISessionRepository } from "@/repositories/contracts/ISessionRepository";
-import type { ISessionStore } from "./contracts/ISessionStore";
+import type { ISessionStore, SessionMetadata } from "./contracts/ISessionStore";
 
 export class SessionStore implements ISessionStore {
   constructor(private readonly sessionRepo: ISessionRepository) {}
 
-  async create(input: { userId: string; userType: "CLIENT" | "DRIVER" }): Promise<{ sessionId: string; refreshToken: string }> {
-    await this.sessionRepo.revokeAllByUserId(input.userId);
-
-    const oldSessionIds = await redis.smembers(CACHE_KEYS.USER_SESSIONS(input.userId));
-    if (oldSessionIds.length > 0) {
-      await Promise.all([
-        ...oldSessionIds.map((id: string) => redis.del(CACHE_KEYS.SESSION(id))),
-        redis.del(CACHE_KEYS.USER_SESSIONS(input.userId)),
-      ]);
+  async create(input: { userId: string; userType: "CLIENT" | "DRIVER" } & SessionMetadata): Promise<{ sessionId: string; refreshToken: string }> {
+    if (input.deviceId) {
+      const existingSession = await this.sessionRepo.findActiveByDeviceId(input.userId, input.deviceId);
+      if (existingSession) {
+        await this.revoke(existingSession.id);
+      }
     }
 
     const refreshToken = generateRefreshToken();
@@ -30,6 +27,9 @@ export class SessionStore implements ISessionStore {
       userType: input.userType,
       refreshTokenHash,
       expiresAt,
+      ipAddress: input.ipAddress ?? null,
+      userAgent: input.userAgent ?? null,
+      deviceId: input.deviceId ?? null,
     };
 
     const session = await this.sessionRepo.create(sessionData);
@@ -129,6 +129,14 @@ export class SessionStore implements ISessionStore {
 
   async updateLastSeenAt(sessionId: string): Promise<void> {
     this.sessionRepo.updateLastSeenAt(sessionId).catch(() => {});
+  }
+
+  async getUserSessionIds(userId: string): Promise<string[]> {
+    return redis.smembers(CACHE_KEYS.USER_SESSIONS(userId));
+  }
+
+  async count(userId: string): Promise<number> {
+    return redis.scard(CACHE_KEYS.USER_SESSIONS(userId));
   }
 }
 

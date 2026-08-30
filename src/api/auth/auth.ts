@@ -20,11 +20,21 @@ export const logoutAll = api<void, { message: string }>(
   },
 );
 
-export const listSessions = api<void, { sessions: string[] }>(
+export const listSessions = api<void, { sessions: Array<{ id: string; deviceId: string | null; userAgent: string | null; ipAddress: string | null; createdAt: Date; lastSeenAt: Date; isCurrent: boolean }> }>(
   { expose: true, method: "GET", path: "/auth/sessions", auth: true },
   async () => {
-    const { userID } = auth.getAuthData()!;
+    const { userID, sessionID } = auth.getAuthData()!;
     const sessions = await userService.getUserSessions(userID);
-    return { sessions };
+    const result = sessions.map(s => ({ ...s, isCurrent: s.id === sessionID }));
+    return { sessions: result };
+  },
+);
+
+export const revokeSession = api<{ sessionId: string }, { message: string }>(
+  { expose: true, method: "DELETE", path: "/auth/sessions/:sessionId", auth: true },
+  async (params) => {
+    const { userID } = auth.getAuthData()!;
+    await userService.revokeSession(userID, params.sessionId);
+    return { message: "Sessão encerrada com sucesso." };
   },
 );

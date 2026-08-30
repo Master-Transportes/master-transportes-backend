@@ -9,7 +9,6 @@ import type {
   RideActiveRow,
   RideWithDriverRow,
 } from "./contracts/IRideRepository";
-import type { RideDbRow, RideWithDriverDbRow } from "./contracts/types";
 import { toRideDetailedRow, toRideWithDriverRow } from "./mappers";
 
 const RIDE_SELECT_COLUMNS = {

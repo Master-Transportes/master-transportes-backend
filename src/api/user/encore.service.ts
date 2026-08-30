@@ -1,4 +1,7 @@
 import { ClientMiddleware } from "@/middlewares/client.middleware";
+import { loginRateLimit, registerRateLimit, refreshRateLimit } from "@/middlewares/rate-limit.middleware";
 import { Service } from "encore.dev/service";
 
-export default new Service("user", { middlewares: [ClientMiddleware] });
+export default new Service("user", {
+  middlewares: [ClientMiddleware, loginRateLimit, registerRateLimit, refreshRateLimit],
+});

@@ -42,6 +42,29 @@ export class SessionRepository implements ISessionRepository {
     return row ?? null;
   }
 
+  async findActiveByDeviceId(userId: string, deviceId: string): Promise<SessionRow | null> {
+    const [row] = await db
+      .select(SESSION_COLUMNS)
+      .from(sessions)
+      .where(and(
+        eq(sessions.userId, userId),
+        eq(sessions.deviceId, deviceId),
+        isNull(sessions.revokedAt),
+      ))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async findAllActiveByUserId(userId: string): Promise<SessionRow[]> {
+    return db
+      .select(SESSION_COLUMNS)
+      .from(sessions)
+      .where(and(
+        eq(sessions.userId, userId),
+        isNull(sessions.revokedAt),
+      ));
+  }
+
   async findActiveByUserId(userId: string): Promise<SessionRow | null> {
     const [row] = await db
       .select(SESSION_COLUMNS)

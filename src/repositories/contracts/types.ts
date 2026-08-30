@@ -1,5 +1,3 @@
-import type { RideStatus } from "@/infra/database/schema";
-
 export interface RideDbRow {
   id: string;
   clientId: string;

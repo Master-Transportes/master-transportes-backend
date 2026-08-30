@@ -32,7 +32,7 @@
     "destr": "^2.0.5",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
-    "encore.dev": "^1.57.11",
+    "encore.dev": "^1.58.4",
     "h3-js": "^4.5.0",
     "ioredis": "^5.8.1",
     "jsonwebtoken": "^9.0.3",

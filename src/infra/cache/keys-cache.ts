@@ -15,6 +15,12 @@ export const MATCHING_KEYS = {
   DRIVER_HEARTBEAT: (id: string) => `driver:${id}:heartbeat`,
 } as const;
 
+export const RATE_LIMIT_KEYS = {
+  LOGIN: (identifier: string) => `ratelimit:login:${identifier}`,
+  REGISTER: (ip: string) => `ratelimit:register:${ip}`,
+  REFRESH: (userId: string) => `ratelimit:refresh:${userId}`,
+};
+
 export const H3_RESOLUTION = 9;
 export const DRIVER_LOCATION_TTL = 300;
 export const DRIVER_HEARTBEAT_TTL = 60;

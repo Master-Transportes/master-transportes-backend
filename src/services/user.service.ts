@@ -36,10 +36,12 @@ import { rideRequestStore } from "@/cache";
 import { driverStatusStore } from "@/cache";
 import { rideEventPublisher } from "@/messaging";
 import { sessionStore } from "@/cache";
+import { sessionRepository } from "@/repositories";
 import { userCache } from "@/cache";
 import { profileService } from "@/services/profile.service";
 import { randomUUID } from "crypto";
 import { isPgUniqueViolation } from "@/utils/database";
+import type { SessionMetadata } from "@/cache/contracts/ISessionStore";
 import { ACTIVE_RIDE_STATUSES } from "@/constants/ride";
 
 export class UserService {
@@ -73,7 +75,7 @@ export class UserService {
     }
   }
 
-  async signIn(payload: SignInDTO): Promise<SignInResponse> {
+  async signIn(payload: SignInDTO, metadata?: SessionMetadata): Promise<SignInResponse> {
     const validated = validateOrThrow(SignInSchema, payload);
     const { email, password } = validated;
 
@@ -85,11 +87,14 @@ export class UserService {
     const { sessionId, refreshToken } = await this.sessionStore.create({
       userId: user.id,
       userType: "CLIENT",
+      ipAddress: metadata?.ipAddress,
+      userAgent: metadata?.userAgent,
+      deviceId: validated.deviceId,
     });
 
     const accessToken = generateToken({ sub: user.id, sid: sessionId, role: "CLIENT" });
 
-    return { accessToken, refreshToken, expiresIn: JWT_EXPIRES_IN };
+    return { accessToken, refreshToken, expiresIn: JWT_EXPIRES_IN, deviceId: validated.deviceId };
   }
 
   async getMe(userID: string): Promise<GetMeResponse> {
@@ -122,6 +127,14 @@ export class UserService {
 
   async logoutAll(userId: string): Promise<void> {
     await this.sessionStore.revokeAll(userId);
+  }
+
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    const session = await sessionRepository.findById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw APIError.notFound("Sessão não encontrada.");
+    }
+    await this.sessionStore.revoke(sessionId);
   }
 
   async refreshSession(refreshToken: string): Promise<RefreshResponse> {
@@ -157,10 +170,16 @@ export class UserService {
     return { accessToken, refreshToken: newRefreshToken, expiresIn: JWT_EXPIRES_IN };
   }
 
-  async getUserSessions(userId: string): Promise<string[]> {
-    const { redis } = await import("@/infra/cache/redis-client");
-    const { CACHE_KEYS } = await import("@/infra/cache/keys-cache");
-    return redis.smembers(CACHE_KEYS.USER_SESSIONS(userId));
+  async getUserSessions(userId: string) {
+    const sessions = await sessionRepository.findAllActiveByUserId(userId);
+    return sessions.map(s => ({
+      id: s.id,
+      deviceId: s.deviceId,
+      userAgent: s.userAgent,
+      ipAddress: s.ipAddress,
+      createdAt: s.createdAt,
+      lastSeenAt: s.lastSeenAt,
+    }));
   }
 
   async getProfile(userID: string): Promise<UserProfileResponse> {

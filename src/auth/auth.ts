@@ -11,7 +11,7 @@ export const JWT_EXPIRES_IN = ACCESS_TOKEN_TTL_SECONDS;
 const ISSUER = "master-transporte";
 
 export function generateToken(payload: { sub: string; sid: string; role: "CLIENT" | "DRIVER" }): string {
-  return jwt.sign({}, JWT_SECRET, {
+  return jwt.sign({ sid: payload.sid, role: payload.role }, JWT_SECRET, {
     subject: payload.sub,
     jwtid: randomUUID(),
     issuer: ISSUER,
@@ -28,9 +28,9 @@ export function verifyToken(token: string): AccessTokenPayload {
 
   return {
     sub: decoded.sub!,
-    sid: decoded.sid ?? (decoded as unknown as { sid: string }).sid ?? "",
+    sid: decoded.sid as string,
     jti: decoded.jti!,
-    role: (decoded as unknown as { role: "CLIENT" | "DRIVER" }).role ?? "CLIENT",
+    role: decoded.role as "CLIENT" | "DRIVER",
     iss: decoded.iss!,
     aud: Array.isArray(decoded.aud) ? decoded.aud[0] : decoded.aud!,
     iat: decoded.iat!,

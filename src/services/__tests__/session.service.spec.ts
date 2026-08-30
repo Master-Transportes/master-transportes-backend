@@ -27,7 +27,7 @@ describe("RedisSessionStore", () => {
         fullName: "Session Test User",
         email: testUserEmail,
         password: hashSync("test-password-123", 10),
-        role: "CLIENT",
+        userType: "CLIENT",
       })
       .returning({ id: users.id });
     testUserId = user.id;
@@ -44,7 +44,7 @@ describe("RedisSessionStore", () => {
     it("creates a session and returns sessionId + refreshToken", async () => {
       const result = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(result.sessionId);
 
@@ -64,7 +64,7 @@ describe("RedisSessionStore", () => {
     it("stores session with 7-day TTL and expiry timestamp", async () => {
       const result = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(result.sessionId);
 
@@ -83,7 +83,7 @@ describe("RedisSessionStore", () => {
     it("adds sessionId to user sessions set", async () => {
       const result = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(result.sessionId);
 
@@ -101,7 +101,7 @@ describe("RedisSessionStore", () => {
     it("returns session data for existing session", async () => {
       const { sessionId } = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(sessionId);
 
@@ -116,7 +116,7 @@ describe("RedisSessionStore", () => {
     it("returns new refresh token and rotates the old one", async () => {
       const { sessionId, refreshToken } = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(sessionId);
 
@@ -144,7 +144,7 @@ describe("RedisSessionStore", () => {
     it("rejects wrong refresh token", async () => {
       const { sessionId } = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(sessionId);
 
@@ -161,7 +161,7 @@ describe("RedisSessionStore", () => {
     it("rejects refresh of revoked session", async () => {
       const { sessionId, refreshToken } = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(sessionId);
 
@@ -182,7 +182,7 @@ describe("RedisSessionStore", () => {
     it("removes session from cache and user sessions set", async () => {
       const { sessionId } = await sessionStore.create({
         userId: testUserId,
-        role: "CLIENT",
+        userType: "CLIENT",
       });
       createdSessionIds.push(sessionId);
 
@@ -228,7 +228,7 @@ describe("RedisSessionStore", () => {
           fullName: "Count Test",
           email: uniqueEmail,
           password: "hash",
-          role: "CLIENT",
+          userType: "CLIENT",
         })
         .returning({ id: users.id });
 
@@ -258,7 +258,7 @@ describe("RedisSessionStore", () => {
           fullName: "No Sessions",
           email: uniqueEmail,
           password: "hash",
-          role: "CLIENT",
+          userType: "CLIENT",
         })
         .returning({ id: users.id });
 
@@ -289,7 +289,7 @@ describe("RedisSessionStore", () => {
           fullName: "No Revoke Test",
           email: uniqueEmail,
           password: "hash",
-          role: "CLIENT",
+          userType: "CLIENT",
         })
         .returning({ id: users.id });
 

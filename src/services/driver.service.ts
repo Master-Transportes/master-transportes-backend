@@ -27,6 +27,7 @@ import type { IRideEventPublisher } from "@/messaging/contracts/IRideEventPublis
 import { driverRepository } from "@/repositories";
 import { rideRepository } from "@/repositories";
 import { sessionStore } from "@/cache";
+import { sessionRepository } from "@/repositories";
 import { driverCache } from "@/cache";
 import { driverLocationCache } from "@/cache";
 import { driverStatusStore } from "@/cache";
@@ -43,7 +44,8 @@ import type {
 } from "@/dto/driver.interface";
 import { haversineDistance } from "@/utils/geo";
 import { isPgUniqueViolation } from "@/utils/database";
-import { COMPLETION_RADIUS_METERS, ACTIVE_RIDE_STATUSES } from "@/constants/ride";
+import type { SessionMetadata } from "@/cache/contracts/ISessionStore";
+import { ACTIVE_RIDE_STATUSES, COMPLETION_RADIUS_METERS } from "@/constants/ride";
 
 export class DriverService {
   constructor(
@@ -77,7 +79,7 @@ export class DriverService {
     }
   }
 
-  async signIn(payload: SignInDTO): Promise<SignInResponse> {
+  async signIn(payload: SignInDTO, metadata?: SessionMetadata): Promise<SignInResponse> {
     const validated = validateOrThrow(SignInSchema, payload);
     const { email, password } = validated;
 
@@ -90,11 +92,14 @@ export class DriverService {
     const { sessionId, refreshToken } = await this.sessionStore.create({
       userId: driver.id,
       userType: "DRIVER",
+      ipAddress: metadata?.ipAddress,
+      userAgent: metadata?.userAgent,
+      deviceId: validated.deviceId,
     });
 
     const accessToken = generateToken({ sub: driver.id, sid: sessionId, role: "DRIVER" });
 
-    return { accessToken, refreshToken, expiresIn: JWT_EXPIRES_IN };
+    return { accessToken, refreshToken, expiresIn: JWT_EXPIRES_IN, deviceId: validated.deviceId };
   }
 
   async getMe(driverId: string): Promise<DriverProfileResponse> {
@@ -116,6 +121,14 @@ export class DriverService {
 
   async logoutAll(driverId: string): Promise<void> {
     await this.sessionStore.revokeAll(driverId);
+  }
+
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    const session = await sessionRepository.findById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw APIError.notFound("Sessão não encontrada.");
+    }
+    await this.sessionStore.revoke(sessionId);
   }
 
   async refreshSession(refreshToken: string): Promise<RefreshResponse> {

@@ -15,6 +15,13 @@
       "when": 1787988762620,
       "tag": "0001_add-sessions-table",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788111446699,
+      "tag": "0002_remove-device-id-from-sessions",
+      "breakpoints": true
     }
   ]
 }

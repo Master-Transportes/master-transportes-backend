@@ -3,12 +3,14 @@ import type { UserStatus } from "./shared.types.ts";
 export interface SignInDTO {
   email: string;
   password: string;
+  deviceId?: string;
 }
 
 export interface SignInResponse {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  deviceId?: string;
 }
 
 export interface RefreshDTO {
