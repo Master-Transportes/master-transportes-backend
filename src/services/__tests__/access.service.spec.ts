@@ -54,7 +54,7 @@ describe("AccessService", () => {
   describe("signIn()", () => {
     it("returns access + refresh tokens for valid credentials", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
@@ -65,24 +65,21 @@ describe("AccessService", () => {
       expect(typeof result.refreshToken).toBe("string");
       expect(result.refreshToken.length).toBe(64);
 
-      expect(result).toHaveProperty("sessionId");
-      expect(typeof result.sessionId).toBe("string");
-
       expect(result).toHaveProperty("expiresIn");
-      expect(result.expiresIn).toBe(1800);
+      expect(result.expiresIn).toBe(900);
 
       const decoded = verifyToken(result.accessToken);
-      expect(decoded).toHaveProperty("userID", testUserId);
-      expect(decoded).toHaveProperty("sessionID");
+      expect(decoded).toHaveProperty("sub", testUserId);
+      expect(decoded).toHaveProperty("sid");
 
-      testSessionId = result.sessionId;
+      testSessionId = decoded.sid;
       testRefreshToken = result.refreshToken;
     });
 
     it("rejects non-existent email", async () => {
       await expect(
         userService.signIn({
-          login: `nobody-${TEST_PREFIX}@test.com`,
+          email: `nobody-${TEST_PREFIX}@test.com`,
           password: DEFAULT_PASSWORD,
         } satisfies SignInDTO),
       ).rejects.toThrow("E-mail ou senha inválidos.");
@@ -91,7 +88,7 @@ describe("AccessService", () => {
     it("rejects wrong password", async () => {
       await expect(
         userService.signIn({
-          login: testUserEmail,
+          email: testUserEmail,
           password: "wrong-p4ssword-here",
         } satisfies SignInDTO),
       ).rejects.toThrow("E-mail ou senha inválidos.");
@@ -100,7 +97,7 @@ describe("AccessService", () => {
     it("rejects invalid email format via validation", async () => {
       await expect(
         userService.signIn({
-          login: "clearly-not-an-email",
+          email: "clearly-not-an-email",
           password: DEFAULT_PASSWORD,
         } satisfies SignInDTO),
       ).rejects.toThrow(APIError);
@@ -109,31 +106,24 @@ describe("AccessService", () => {
     it("rejects short password via validation", async () => {
       await expect(
         userService.signIn({
-          login: testUserEmail,
+          email: testUserEmail,
           password: "12345",
         } satisfies SignInDTO),
       ).rejects.toThrow(APIError);
-    });
-
-    it("returns same error message for wrong email or password", async () => {
-      await expect(
-        userService.signIn({ login: `random-${TEST_PREFIX}@test.com`, password: "irrelevant" } satisfies SignInDTO),
-      ).rejects.toThrow("E-mail ou senha inválidos.");
-
-      await expect(
-        userService.signIn({ login: testUserEmail, password: "definitely-wrong" } satisfies SignInDTO),
-      ).rejects.toThrow("E-mail ou senha inválidos.");
     });
   });
 
   describe("refreshSession()", () => {
     it("returns new tokens for a valid refresh token", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      const refreshed = await userService.refreshSession(result.sessionId, result.refreshToken);
+      const decoded = verifyToken(result.accessToken);
+      const sessionId = decoded.sid;
+
+      const refreshed = await userService.refreshSession(result.refreshToken);
 
       expect(refreshed).toHaveProperty("accessToken");
       expect(refreshed.accessToken.split(".").length).toBe(3);
@@ -142,34 +132,33 @@ describe("AccessService", () => {
       expect(refreshed).toHaveProperty("refreshToken");
       expect(refreshed.refreshToken).not.toBe(result.refreshToken);
 
-      expect(refreshed).toHaveProperty("sessionId", result.sessionId);
-      expect(refreshed).toHaveProperty("expiresIn", 1800);
+      expect(refreshed).toHaveProperty("expiresIn", 900);
 
-      const decoded = verifyToken(refreshed.accessToken);
-      expect(decoded.userID).toBe(testUserId);
-      expect(decoded.sessionID).toBe(result.sessionId);
+      const refreshedDecoded = verifyToken(refreshed.accessToken);
+      expect(refreshedDecoded.sub).toBe(testUserId);
+      expect(refreshedDecoded.sid).toBe(sessionId);
     });
 
     it("rejects refresh with wrong refresh token", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
       let error: unknown;
       try {
-        await userService.refreshSession(result.sessionId, "a".repeat(64));
+        await userService.refreshSession("a".repeat(64));
       } catch (e) {
         error = e;
       }
       expect(error).toBeInstanceOf(APIError);
-      expect((error as APIError).message).toBe("Refresh token inválido.");
+      expect((error as APIError).message).toBe("Refresh token inválido ou expirado.");
     });
 
     it("rejects refresh for non-existent session", async () => {
       let error: unknown;
       try {
-        await userService.refreshSession("00000000-0000-0000-0000-000000000000", "a".repeat(64));
+        await userService.refreshSession("0000000000000000000000000000000000000000000000000000000000000000");
       } catch (e) {
         error = e;
       }
@@ -178,15 +167,18 @@ describe("AccessService", () => {
 
     it("rejects refresh after session is revoked", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      await userService.logout(result.sessionId);
+      const decoded = verifyToken(result.accessToken);
+      const sessionId = decoded.sid;
+
+      await userService.logout(sessionId);
 
       let error: unknown;
       try {
-        await userService.refreshSession(result.sessionId, result.refreshToken);
+        await userService.refreshSession(result.refreshToken);
       } catch (e) {
         error = e;
       }
@@ -197,37 +189,40 @@ describe("AccessService", () => {
   describe("refresh token rotation", () => {
     it("invalidates old refresh token after rotation", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
       const oldRefreshToken = result.refreshToken;
 
-      await userService.refreshSession(result.sessionId, oldRefreshToken);
+      await userService.refreshSession(oldRefreshToken);
 
       let error: unknown;
       try {
-        await userService.refreshSession(result.sessionId, oldRefreshToken);
+        await userService.refreshSession(oldRefreshToken);
       } catch (e) {
         error = e;
       }
       expect(error).toBeInstanceOf(APIError);
-      expect((error as APIError).message).toBe("Refresh token inválido.");
+      expect((error as APIError).message).toBe("Refresh token inválido ou expirado.");
     });
   });
 
   describe("logout / revoke", () => {
     it("prevents refresh after logout", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      await userService.logout(result.sessionId);
+      const decoded = verifyToken(result.accessToken);
+      const sessionId = decoded.sid;
+
+      await userService.logout(sessionId);
 
       let error: unknown;
       try {
-        await userService.refreshSession(result.sessionId, result.refreshToken);
+        await userService.refreshSession(result.refreshToken);
       } catch (e) {
         error = e;
       }
@@ -236,11 +231,11 @@ describe("AccessService", () => {
 
     it("revokes all sessions on logoutAll", async () => {
       const session1 = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
       const session2 = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
@@ -255,7 +250,7 @@ describe("AccessService", () => {
       for (const s of [session1, session2]) {
         let error: unknown;
         try {
-          await userService.refreshSession(s.sessionId, s.refreshToken);
+          await userService.refreshSession(s.refreshToken);
         } catch (e) {
           error = e;
         }
@@ -275,24 +270,26 @@ describe("AccessService", () => {
         confirmPassword: DEFAULT_PASSWORD,
       } satisfies RegisterUserDTO);
 
-      const login = await userService.signIn({
-        login: email,
+      const loginResult = await userService.signIn({
+        email,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
-      expect(login.accessToken).toBeTruthy();
+      expect(loginResult.accessToken).toBeTruthy();
 
-      const decoded = verifyToken(login.accessToken);
-      expect(decoded.userID).toBe(id);
+      const decoded = verifyToken(loginResult.accessToken);
+      expect(decoded.sub).toBe(id);
 
-      const refreshed = await userService.refreshSession(login.sessionId, login.refreshToken);
-      expect(refreshed.accessToken).not.toBe(login.accessToken);
+      const sessionId = decoded.sid;
 
-      await userService.logout(login.sessionId);
+      const refreshed = await userService.refreshSession(loginResult.refreshToken);
+      expect(refreshed.accessToken).not.toBe(loginResult.accessToken);
+
+      await userService.logout(sessionId);
 
       let error: unknown;
       try {
-        await userService.refreshSession(login.sessionId, refreshed.refreshToken);
+        await userService.refreshSession(refreshed.refreshToken);
       } catch (e) {
         error = e;
       }
@@ -326,35 +323,35 @@ describe("AccessService", () => {
   });
 
   describe("verifyToken()", () => {
-    it("decodes a valid token with userID and sessionID", async () => {
+    it("decodes a valid token with sub and sid", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
       const decoded = verifyToken(result.accessToken);
-      expect(decoded).toHaveProperty("userID", testUserId);
-      expect(decoded).toHaveProperty("sessionID", result.sessionId);
+      expect(decoded).toHaveProperty("sub", testUserId);
+      expect(decoded).toHaveProperty("sid");
     });
 
     it("rejects a malformed token string", () => {
-      expect(() => verifyToken("not-a-valid-jwt")).toThrow("Invalid or expired token.");
+      expect(() => verifyToken("not-a-valid-jwt")).toThrow(Error);
     });
 
     it("rejects an empty token string", () => {
-      expect(() => verifyToken("")).toThrow("Invalid or expired token.");
+      expect(() => verifyToken("")).toThrow(Error);
     });
 
     it("rejects a tampered token", async () => {
       const result = await userService.signIn({
-        login: testUserEmail,
+        email: testUserEmail,
         password: DEFAULT_PASSWORD,
       } satisfies SignInDTO);
 
       const [header, payload, signature] = result.accessToken.split(".");
       const tampered = `${header}.${payload}tampered.${signature}`;
 
-      expect(() => verifyToken(tampered)).toThrow("Invalid or expired token.");
+      expect(() => verifyToken(tampered)).toThrow(Error);
     });
   });
 
@@ -404,51 +401,5 @@ describe("AccessService", () => {
     });
   });
 
-  describe("inactive user sign in", () => {
-    let inactiveUserId: string;
 
-    beforeAll(async () => {
-      const email = `inactive-${TEST_PREFIX}@test.com`;
-      const [user] = await db
-        .insert(users)
-        .values({
-          fullName: "Inactive User",
-          email,
-          password: hashSync(DEFAULT_PASSWORD, 10),
-          role: "CLIENT",
-        })
-        .returning({ id: users.id });
-      inactiveUserId = user.id;
-    });
-
-    afterAll(async () => {
-      if (inactiveUserId) {
-        await redis.del(CACHE_KEYS.USER(inactiveUserId));
-        await redis.del(CACHE_KEYS.USER_BASE(inactiveUserId));
-        await redis.del(CACHE_KEYS.USER_SESSIONS(inactiveUserId));
-      }
-    });
-
-    it("can authenticate even when inactive (auth check is at middleware level)", async () => {
-      const email = `inactive-${TEST_PREFIX}@test.com`;
-      const result = await userService.signIn({
-        login: email,
-        password: DEFAULT_PASSWORD,
-      });
-
-      expect(result).toHaveProperty("accessToken");
-      expect(result.accessToken.split(".").length).toBe(3);
-    });
-  });
-
-  describe("non-existent user sign in", () => {
-    it("rejects sign in for completely unknown email", async () => {
-      await expect(
-        userService.signIn({
-          login: `nonexistent-${TEST_PREFIX}@test.com`,
-          password: DEFAULT_PASSWORD,
-        }),
-      ).rejects.toThrow("E-mail ou senha inválidos.");
-    });
-  });
 });

@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "docker compose up -d && npx drizzle-kit migrate && npm run seed && npx encore run",
     "start": "npx encore run",
-    "seed": "npx tsx drizzle/init/area/areas-init.ts && npx tsx drizzle/init/user/index.ts",
+    "seed": "npx tsx drizzle/init/user/index.ts",
     "test": "encore exec -- bun test",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",

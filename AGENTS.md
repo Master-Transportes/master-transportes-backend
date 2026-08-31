@@ -17,7 +17,7 @@ Não carregue arquivos grandes sem necessidade.
 |---|---|
 | encore.dev | Runtime e API endpoints |
 | TypeScript | Toda a base |
-| PostgreSQL + PostGIS | Dados persistentes (via Drizzle ORM) |
+| PostgreSQL | Dados persistentes (via Drizzle ORM) |
 | Redis (ioredis) | Cache de sessão e profile |
 | RabbitMQ (amqplib) | Fila de eventos de rides |
 | Zod | Validação de schemas |
@@ -31,7 +31,6 @@ src/api/                → Endpoints encore.dev
 ├── dashboard/          → Admin: listar/banir/ativar usuários
 ├── driver/             → Perfil, histórico de corridas
 ├── user/               → Perfil, histórico de corridas
-├── area/               → Resolução de região por coordenada
 src/infra/
 ├── drizzle/            → PostgreSQL via Drizzle ORM
 │   ├── contracts/      → IUserRepository, IDriverRepository, IRideRepository, etc.
@@ -57,7 +56,7 @@ src/services/           → Lógica de negócio (singletons, sem interfaces)
 ├── driver.service.ts
 ├── profile.service.ts
 ├── dashboard.service.ts
-└── area.service.ts
+└── wallet.service.ts
 src/dto/                → DTOs de entrada/saída
 src/middlewares/        → Middlewares de autorização
 src/validations/        → Schemas Zod
@@ -123,7 +122,7 @@ NÃO use para: mudanças pequenas, arquivos isolados, bugs simples, ajustes loca
 ```
 API (encore.dev)
   ├── Redis: sessões, cache de profile, localização de drivers, lock de corrida
-  ├── PostgreSQL: dados persistentes (users, drivers, rides, vehicles, areas)
+  ├── PostgreSQL: dados persistentes (users, drivers, rides, vehicles, wallets)
   └── RabbitMQ: fila de eventos de rides
 ```
 
@@ -146,7 +145,7 @@ Ride events publicados → RabbitMQ → Consumers
 docker compose up -d
 # Migrations + seed
 npx drizzle-kit migrate
-npm run seed   # roda inits de areas e users
+npm run seed   # roda init de users
 ```
 
 ### Terminal único

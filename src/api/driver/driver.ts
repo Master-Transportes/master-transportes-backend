@@ -47,16 +47,6 @@ export const me = api<void, DriverProfileResponse>(
   },
 );
 
-export const getWallet = api<void, { balanceInCents: number; currency: string }>(
-  { expose: true, method: "GET", path: "/driver/wallet", auth: true },
-  async () => {
-    return {
-      balanceInCents: 15340,
-      currency: "BRL",
-    };
-  },
-);
-
 export const updateProfile = api<UpdateProfileDTO, DriverProfileResponse>(
   { expose: true, method: "PUT", path: "/driver/profile", auth: true },
   async payload => {

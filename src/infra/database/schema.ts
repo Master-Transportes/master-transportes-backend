@@ -10,7 +10,6 @@ import {
   uniqueIndex,
   boolean,
   date,
-  customType,
 } from "drizzle-orm/pg-core";
 
 export const ROLES = ["CLIENT", "ADMIN", "EMPLOYEE"] as const;
@@ -25,11 +24,8 @@ export type DriverStatus = (typeof DRIVER_STATUSES)[number];
 export const RIDE_STATUSES = ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
 export type RideStatus = (typeof RIDE_STATUSES)[number];
 
-export const geometry = customType<{ data: string }>({
-  dataType() {
-    return "geometry";
-  },
-});
+export const WALLET_STATUSES = ["ACTIVE", "SUSPENDED", "CLOSED"] as const;
+export type WalletStatus = (typeof WALLET_STATUSES)[number];
 
 export const users = pgTable(
   "users",
@@ -218,22 +214,23 @@ export const sessions = pgTable(
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 
-export const areas = pgTable(
-  "areas",
+export const wallets = pgTable(
+  "wallets",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    municipality: varchar("municipality").notNull(),
-    abbrevState: varchar("abbrev_state").notNull(),
-    geometry: geometry("geometry"),
-    cdMun: varchar("cd_mun").notNull(),
-    cdUf: varchar("cd_uf").notNull(),
-    nmUf: varchar("nm_uf").notNull(),
-    cdRegia: varchar("cd_regia").notNull(),
-    nmRegia: varchar("nm_regia").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    balance: integer("balance").notNull().default(0),
+    currency: varchar("currency", { length: 3 }).notNull().default("BRL"),
+    status: varchar("status", { length: 20 }).$type<WalletStatus>().notNull().default("ACTIVE"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   table => [
-    index("areas_municipality_idx").on(table.municipality),
-    index("areas_abbrev_state_idx").on(table.abbrevState),
-    index("areas_geometry_idx").using("gist", table.geometry),
+    uniqueIndex("wallets_user_id_unique").on(table.userId),
+    index("wallets_status_idx").on(table.status),
+    sql`CONSTRAINT wallets_status_check CHECK (${table.status} IN ('ACTIVE', 'SUSPENDED', 'CLOSED'))`,
+    sql`CONSTRAINT wallets_balance_check CHECK (${table.balance} >= 0)`,
   ],
 );

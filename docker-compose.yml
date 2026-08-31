@@ -2,7 +2,7 @@ name: master-transporte
 
 services:
   postgres:
-    image: postgis/postgis:15-3.4
+    image: postgres:18
     container_name: mt_postgres
     restart: unless-stopped
     ports:
@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     networks:
       - master-transporte-network
     healthcheck:

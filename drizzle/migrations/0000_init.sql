@@ -1,15 +1,3 @@
-CREATE TABLE "areas" (
-	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"municipality" varchar NOT NULL,
-	"abbrev_state" varchar NOT NULL,
-	"geometry" geometry,
-	"cd_mun" varchar NOT NULL,
-	"cd_uf" varchar NOT NULL,
-	"nm_uf" varchar NOT NULL,
-	"cd_regia" varchar NOT NULL,
-	"nm_regia" varchar NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "driver_licenses" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"driver_id" uuid NOT NULL,
@@ -75,6 +63,20 @@ CREATE TABLE "rides" (
 	"deleted_at" timestamp
 );
 --> statement-breakpoint
+CREATE TABLE "sessions" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"user_type" varchar(20) NOT NULL,
+	"refresh_token_hash" varchar(64) NOT NULL,
+	"device_id" varchar(255),
+	"user_agent" varchar(500),
+	"ip_address" varchar(45),
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"last_seen_at" timestamp DEFAULT now() NOT NULL,
+	"expires_at" timestamp NOT NULL,
+	"revoked_at" timestamp
+);
+--> statement-breakpoint
 CREATE TABLE "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"full_name" varchar(120) NOT NULL,
@@ -104,14 +106,22 @@ CREATE TABLE "vehicles" (
 	CONSTRAINT "vehicles_plate_unique" UNIQUE("plate")
 );
 --> statement-breakpoint
+CREATE TABLE "wallets" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"user_id" uuid NOT NULL,
+	"balance" integer DEFAULT 0 NOT NULL,
+	"currency" varchar(3) DEFAULT 'BRL' NOT NULL,
+	"status" varchar(20) DEFAULT 'ACTIVE' NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 ALTER TABLE "driver_licenses" ADD CONSTRAINT "driver_licenses_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "ride_locations" ADD CONSTRAINT "ride_locations_ride_id_rides_id_fk" FOREIGN KEY ("ride_id") REFERENCES "public"."rides"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rides" ADD CONSTRAINT "rides_client_id_users_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "rides" ADD CONSTRAINT "rides_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "vehicles" ADD CONSTRAINT "vehicles_driver_id_drivers_id_fk" FOREIGN KEY ("driver_id") REFERENCES "public"."drivers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "areas_municipality_idx" ON "areas" USING btree ("municipality");--> statement-breakpoint
-CREATE INDEX "areas_abbrev_state_idx" ON "areas" USING btree ("abbrev_state");--> statement-breakpoint
-CREATE INDEX "areas_geometry_idx" ON "areas" USING gist ("geometry");--> statement-breakpoint
+ALTER TABLE "wallets" ADD CONSTRAINT "wallets_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "driver_licenses_driver_id_idx" ON "driver_licenses" USING btree ("driver_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "driver_licenses_active_unique" ON "driver_licenses" USING btree ("driver_id") WHERE "is_active" = true;--> statement-breakpoint
 CREATE UNIQUE INDEX "driver_licenses_cnh_unique" ON "driver_licenses" USING btree ("cnh");--> statement-breakpoint
@@ -125,9 +135,14 @@ CREATE INDEX "rides_status_idx" ON "rides" USING btree ("status");--> statement-
 CREATE INDEX "rides_created_at_idx" ON "rides" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "rides_client_id_status_idx" ON "rides" USING btree ("client_id","status");--> statement-breakpoint
 CREATE INDEX "rides_driver_id_status_idx" ON "rides" USING btree ("driver_id","status");--> statement-breakpoint
+CREATE INDEX "sessions_user_id_idx" ON "sessions" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "sessions_refresh_token_hash_idx" ON "sessions" USING btree ("refresh_token_hash");--> statement-breakpoint
+CREATE INDEX "sessions_expires_at_idx" ON "sessions" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "users_role_idx" ON "users" USING btree ("role");--> statement-breakpoint
 CREATE INDEX "users_status_idx" ON "users" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "users_created_at_idx" ON "users" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "vehicles_driver_id_idx" ON "vehicles" USING btree ("driver_id");--> statement-breakpoint
 CREATE INDEX "vehicles_plate_idx" ON "vehicles" USING btree ("plate");--> statement-breakpoint
-CREATE UNIQUE INDEX "vehicles_active_unique" ON "vehicles" USING btree ("driver_id") WHERE "is_active" = true;
+CREATE UNIQUE INDEX "vehicles_active_unique" ON "vehicles" USING btree ("driver_id") WHERE "is_active" = true;--> statement-breakpoint
+CREATE UNIQUE INDEX "wallets_user_id_unique" ON "wallets" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "wallets_status_idx" ON "wallets" USING btree ("status");

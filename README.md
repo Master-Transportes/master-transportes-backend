@@ -8,7 +8,7 @@ Backend do Master Transport construído com **Encore.ts**, **TypeScript**, **Dri
 |---|---|
 | Encore.ts | Runtime e API endpoints |
 | TypeScript | Toda a base |
-| Drizzle ORM + PostgreSQL/PostGIS | Dados persistentes + queries geoespaciais |
+| Drizzle ORM + PostgreSQL | Dados persistentes |
 | Redis (ioredis) | Cache de sessão, profile, localização/status de motoristas e pedidos de corrida |
 | RabbitMQ (amqplib) | Fila de eventos de rides |
 | Zod | Validação de schemas |
@@ -23,17 +23,16 @@ src/
 │   ├── user/              #   Perfil, histórico, request/cancel ride
 │   ├── driver/            #   Perfil, histórico, localização, online/offline, ofertas
 │   ├── dashboard/         #   Admin: listar/ativar/banir usuários
-│   └── area/              #   Resolução de região por coordenada
 ├── services/              # Lógica de negócio (singletons)
 │   ├── user.service.ts    #   Registro, login, /me, perfil, rides
 │   ├── driver.service.ts  #   Registro, login, perfil, localização, ofertas
 │   ├── profile.service.ts #   Perfil e senha compartilhados
 │   ├── dashboard.service.ts # Ações de admin
-│   └── area.service.ts    #   Resolução de região
+│   └── wallet.service.ts   # Carteira do motorista
 ├── dto/                   # DTOs de entrada/saída (+ shared.types.ts com enums da API)
 ├── validations/           # Schemas Zod
 ├── middlewares/           # Autorização (auth gateway + role/client/driver/admin)
-├── constants/             # Constantes de negócio (regions, ride, database)
+├── constants/             # Constantes de negócio (ride, cache, rate-limit, system)
 ├── auth/                  # JWT (sign/verify)
 ├── utils/                 # Utils gerais (geo.ts)
 └── infra/                 # Infra por tecnologia (contracts/ + implementations/)
@@ -50,7 +49,7 @@ src/
 # Infra (PostgreSQL + Redis + RabbitMQ)
 docker compose up -d
 
-# Migrations + seed (62 municípios + usuários/drivers de teste)
+# Migrations + seed (usuários/drivers de teste)
 npx drizzle-kit migrate
 npm run seed
 

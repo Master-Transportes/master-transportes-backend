@@ -5,7 +5,6 @@ import { latLngToCell } from "h3-js";
 import { H3_RESOLUTION } from "@/infra/cache/keys-cache";
 import { rideRepository } from "@/repositories";
 import { rideRequestStore } from "@/cache";
-import { areaService } from "@/services/area.service";
 import log from "encore.dev/log";
 import { ensureChannel } from "@/infra/messaging/connection";
 import type { CreateRideData } from "@/repositories/contracts/IRideRepository";
@@ -44,7 +43,6 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
     return;
   }
 
-  const region = await areaService.getRegion({ lat: event.origin.lat, lng: event.origin.lng });
   const originH3 = latLngToCell(event.origin.lat, event.origin.lng, H3_RESOLUTION);
   const destinationH3 = latLngToCell(event.destination.lat, event.destination.lng, H3_RESOLUTION);
 
@@ -61,8 +59,8 @@ async function handleMessage(msg: ConsumeMessage): Promise<void> {
     destinationLat: event.destination.lat,
     destinationLng: event.destination.lng,
     destinationH3,
-    regionId: region.regionId,
-    municipalityId: region.municipalityId,
+    regionId: "am-interior",
+    municipalityId: "unknown",
   };
 
   await rideRepository.createRideAndLocation(data);
