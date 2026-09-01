@@ -8,4 +8,5 @@ export { driverCache } from "./driver.cache";
 export { driverLocationCache } from "./driver-location.cache";
 export { driverStatusStore } from "./driver-status.cache";
 export { rideRequestStore } from "./ride-request.cache";
+export { walletCache } from "./wallet.cache";
 import "./expiration-listener";

@@ -9,7 +9,7 @@ export function validateOrThrow<S extends z.ZodTypeAny>(
   const result = schema.safeParse(data);
 
   if (!result.success) {
-    throw APIError.invalidArgument(options?.message ?? "Invalid request body").withDetails({
+    throw APIError.invalidArgument(options?.message ?? "Corpo da requisição inválido.").withDetails({
       errors: result.error.issues.map(i => ({
         field: i.path.length ? i.path.join(".") : "root",
         message: i.message,

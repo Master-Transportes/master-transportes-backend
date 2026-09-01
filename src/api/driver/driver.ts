@@ -1,6 +1,7 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { driverService } from "@/services/driver.service";
+import { walletService } from "@/services/wallet.service";
 import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
 import type {
   ChangePasswordDTO,
@@ -20,10 +21,16 @@ import type {
   DriverRideListResponse,
 } from "@/dto/driver.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
+import type {
+  WalletResponse,
+  WalletBalanceResponse,
+  WalletTransactionListResponse,
+  PayoutResponse,
+} from "@/dto/wallet.interface";
 
 export const login = api<SignInDTO, SignInResponse>(
   { expose: true, method: "POST", path: "/driver/login", auth: false },
-  async (payload) => {
+  async payload => {
     const meta = getRequestMetadata();
     return driverService.signIn(payload, meta);
   },
@@ -31,7 +38,7 @@ export const login = api<SignInDTO, SignInResponse>(
 
 export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
-  async (payload) => driverService.register(payload),
+  async payload => driverService.register(payload),
 );
 
 export const refresh = api<RefreshDTO, RefreshResponse>(
@@ -71,11 +78,14 @@ export const updateLocation = api<UpdateDriverLocationDTO, void>(
   },
 );
 
-export const listRides = api<void, DriverRideListResponse>(
+export const listRides = api<{ page?: string; limit?: string }, DriverRideListResponse>(
   { expose: true, method: "GET", path: "/driver/rides", auth: true },
-  async () => {
+  async params => {
     const { userID } = auth.getAuthData()!;
-    return driverService.getRides(userID);
+    return driverService.getRides(userID, {
+      page: params.page ? Number(params.page) : undefined,
+      limit: params.limit ? Number(params.limit) : undefined,
+    });
   },
 );
 
@@ -140,5 +150,40 @@ export const getStatus = api<void, DriverStatusResponse>(
   async () => {
     const { userID } = auth.getAuthData()!;
     return driverService.getStatus(userID);
+  },
+);
+
+export const getWallet = api<void, WalletResponse>(
+  { expose: true, method: "GET", path: "/driver/wallet", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return walletService.getWallet(userID, "DRIVER");
+  },
+);
+
+export const getBalance = api<void, WalletBalanceResponse>(
+  { expose: true, method: "GET", path: "/driver/wallet/balance", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return walletService.getBalance(userID, "DRIVER");
+  },
+);
+
+export const listTransactions = api<{ page?: string; limit?: string }, WalletTransactionListResponse>(
+  { expose: true, method: "GET", path: "/driver/wallet/transactions", auth: true },
+  async params => {
+    const { userID } = auth.getAuthData()!;
+    return walletService.getTransactions(userID, "DRIVER", {
+      page: params.page ? Number(params.page) : undefined,
+      limit: params.limit ? Number(params.limit) : undefined,
+    });
+  },
+);
+
+export const requestPayout = api<{ amountInCents: number }, PayoutResponse>(
+  { expose: true, method: "POST", path: "/driver/wallet/payout", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    return walletService.requestPayout(userID, "DRIVER", payload.amountInCents);
   },
 );

@@ -46,16 +46,6 @@ export interface AsaasPaymentStatus {
   status: string;
 }
 
-export interface AsaasWebhookEvent {
-  id: string;
-  event: string;
-  dateCreated: string;
-  account: {
-    id: string;
-  };
-  payment: AsaasPayment;
-}
-
 export interface AsaasError {
   errors: Array<{
     code: string;

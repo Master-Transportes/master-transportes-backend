@@ -1,7 +1,13 @@
-import { eq } from "drizzle-orm";
-import { payments } from "@/infra/database/schema";
+import { and, eq, sql } from "drizzle-orm";
+import { payments, paymentWebhookEvents, wallets, walletTransactions } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
-import type { IPaymentRepository, PaymentRow, CreatePaymentData } from "./contracts/IPaymentRepository";
+import type {
+  IPaymentRepository,
+  PaymentRow,
+  CreatePaymentData,
+  WebhookEventRow,
+  CreateWebhookEventData,
+} from "./contracts/IPaymentRepository";
 import type { PaymentStatus } from "@/infra/database/schema";
 
 const PAYMENT_COLUMNS = {
@@ -17,6 +23,16 @@ const PAYMENT_COLUMNS = {
   paidAt: payments.paidAt,
   createdAt: payments.createdAt,
   updatedAt: payments.updatedAt,
+} as const;
+
+const WEBHOOK_EVENT_COLUMNS = {
+  id: paymentWebhookEvents.id,
+  provider: paymentWebhookEvents.provider,
+  externalEventId: paymentWebhookEvents.externalEventId,
+  eventType: paymentWebhookEvents.eventType,
+  payload: paymentWebhookEvents.payload,
+  processedAt: paymentWebhookEvents.processedAt,
+  createdAt: paymentWebhookEvents.createdAt,
 } as const;
 
 export class PaymentRepository implements IPaymentRepository {
@@ -69,6 +85,65 @@ export class PaymentRepository implements IPaymentRepository {
 
     const [row] = await db.update(payments).set(updateData).where(eq(payments.id, id)).returning(PAYMENT_COLUMNS);
     return row;
+  }
+
+  async confirmPaymentReceived(
+    paymentId: string,
+    walletId: string,
+    amount: number,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    await db.transaction(async tx => {
+      await tx
+        .update(payments)
+        .set({ status: "RECEIVED", paidAt: new Date(), updatedAt: new Date() })
+        .where(eq(payments.id, paymentId));
+
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.id, walletId)).for("update").limit(1);
+      if (!wallet) throw new Error("Carteira não encontrada.");
+      if (wallet.status !== "ACTIVE") throw new Error("Carteira não está ativa.");
+
+      await tx
+        .insert(walletTransactions)
+        .values({
+          walletId,
+          type: "DEPOSIT",
+          direction: "CREDIT",
+          amount,
+          status: "COMPLETED",
+          reference: "Depósito via Pix",
+          metadata,
+        })
+        .returning();
+
+      await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} + ${amount}`, updatedAt: new Date() })
+        .where(eq(wallets.id, walletId));
+    });
+  }
+
+  async findWebhookEventByExternalId(externalEventId: string): Promise<WebhookEventRow | null> {
+    const [row] = await db
+      .select(WEBHOOK_EVENT_COLUMNS)
+      .from(paymentWebhookEvents)
+      .where(eq(paymentWebhookEvents.externalEventId, externalEventId))
+      .limit(1);
+    if (!row) return null;
+    return { ...row, payload: row.payload as Record<string, unknown> };
+  }
+
+  async createWebhookEvent(data: CreateWebhookEventData): Promise<WebhookEventRow> {
+    const [row] = await db
+      .insert(paymentWebhookEvents)
+      .values({
+        provider: data.provider,
+        externalEventId: data.externalEventId,
+        eventType: data.eventType,
+        payload: data.payload,
+      })
+      .returning(WEBHOOK_EVENT_COLUMNS);
+    return { ...row, payload: row.payload as Record<string, unknown> };
   }
 }
 

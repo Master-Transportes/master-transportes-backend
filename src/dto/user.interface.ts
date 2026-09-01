@@ -65,6 +65,9 @@ export interface RegisterAccountResponse {
 
 export interface RideListResponse {
   rides: RideSummary[];
+  page: number;
+  limit: number;
+  total: number;
 }
 
 export interface RequestRideDTO {

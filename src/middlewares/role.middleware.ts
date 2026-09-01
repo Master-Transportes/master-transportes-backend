@@ -26,7 +26,7 @@ export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
       if (cached.role !== options.role) {
         throw APIError.permissionDenied(options.unauthorizedMessage);
       }
-      if (cached.status !== "ACTIVE") {
+      if (cached.status === "REJECTED") {
         throw APIError.permissionDenied(options.inactiveMessage);
       }
       return next(req);
@@ -43,7 +43,7 @@ export const createRoleMiddleware = (options: RoleMiddlewareOptions) =>
       throw APIError.permissionDenied(options.unauthorizedMessage);
     }
 
-    if (dbUser.status !== "ACTIVE") {
+    if (dbUser.status === "REJECTED") {
       throw APIError.permissionDenied(options.inactiveMessage);
     }
 

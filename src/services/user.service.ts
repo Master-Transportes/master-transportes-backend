@@ -6,6 +6,7 @@ import { SignInSchema, RefreshSchema } from "@/validations/dto/access.validate";
 import {
   CancelRideSchema,
   ChangePasswordSchema,
+  ListRidesSchema,
   RegisterUserSchema,
   RequestRideSchema,
   UpdateProfileSchema,
@@ -184,8 +185,12 @@ export class UserService {
     return this.profileService_.getProfile(userID);
   }
 
-  async getRides(userID: string): Promise<{ rides: RideSummary[] }> {
-    const rows = await this.rideRepo.findByClientId(userID);
+  async getRides(
+    userID: string,
+    options?: { page?: number; limit?: number },
+  ): Promise<{ rides: RideSummary[]; page: number; limit: number; total: number }> {
+    const validated = validateOrThrow(ListRidesSchema, options ?? {});
+    const { rides: rows, total } = await this.rideRepo.findByClientId(userID, validated.page, validated.limit);
     const rides: RideSummary[] = rows.map(row => ({
       id: row.id,
       origin: { name: row.origin.name, lat: row.origin.lat, lng: row.origin.lng },
@@ -196,7 +201,7 @@ export class UserService {
       cancelledAt: row.cancelledAt,
       createdAt: row.createdAt,
     }));
-    return { rides };
+    return { rides, page: validated.page, limit: validated.limit, total };
   }
 
   async getActiveRide(passengerId: string): Promise<ActiveRideResponse> {

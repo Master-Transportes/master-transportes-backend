@@ -64,6 +64,9 @@ export type { CancelRideParams } from "./shared.types.ts";
 
 export interface DriverRideListResponse {
   rides: RideDetailedInfo[];
+  page: number;
+  limit: number;
+  total: number;
 }
 
 export interface DriverProfileResponse {

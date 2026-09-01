@@ -68,7 +68,7 @@ export class WalletTransactionRepository implements IWalletTransactionRepository
     };
   }
 
-  async findByProviderEventId(provider: string, externalEventId: string): Promise<WalletTransactionRow | null> {
+  async findByExternalEventId(provider: string, externalEventId: string): Promise<WalletTransactionRow | null> {
     const [row] = await db
       .select()
       .from(walletTransactions)

@@ -9,6 +9,7 @@ import {
   CancelRideSchema,
   ChangeDriverPasswordSchema,
   CompleteRideSchema,
+  ListDriverRidesSchema,
   RegisterDriverSchema,
   UpdateDriverLocationSchema,
   UpdateDriverProfileSchema,
@@ -167,8 +168,12 @@ export class DriverService {
     return { accessToken, refreshToken: newRefreshToken, expiresIn: JWT_EXPIRES_IN };
   }
 
-  async getRides(driverId: string): Promise<{ rides: RideDetailedInfo[] }> {
-    const rows = await this.rideRepo.findByDriverId(driverId);
+  async getRides(
+    driverId: string,
+    options?: { page?: number; limit?: number },
+  ): Promise<{ rides: RideDetailedInfo[]; page: number; limit: number; total: number }> {
+    const validated = validateOrThrow(ListDriverRidesSchema, options ?? {});
+    const { rides: rows, total } = await this.rideRepo.findByDriverId(driverId, validated.page, validated.limit);
     const rides: RideDetailedInfo[] = rows.map(row => ({
       id: row.id,
       clientId: row.clientId,
@@ -189,7 +194,7 @@ export class DriverService {
       createdAt: row.createdAt,
       deletedAt: row.deletedAt,
     }));
-    return { rides };
+    return { rides, page: validated.page, limit: validated.limit, total };
   }
 
   async updateProfile(driverId: string, payload: UpdateProfileDTO): Promise<DriverProfileResponse> {
@@ -212,7 +217,7 @@ export class DriverService {
     const hashed = await hash(newPassword, 10);
     await this.driverRepo.updatePassword(driverId, hashed);
 
-    await this.sessionStore.revokeAll(driverId);
+    await Promise.all([this.driverCacheService.invalidate(driverId), this.sessionStore.revokeAll(driverId)]);
   }
 
   async updateLocation(userID: string, payload: UpdateDriverLocationDTO): Promise<void> {

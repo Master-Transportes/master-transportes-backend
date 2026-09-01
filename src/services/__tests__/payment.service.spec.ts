@@ -3,7 +3,7 @@ import { like, eq } from "drizzle-orm";
 import { hashSync } from "bcrypt";
 import { db } from "@/infra/database/drizzle";
 import { users, wallets, walletTransactions, payments, paymentWebhookEvents } from "@/infra/database/schema";
-import { walletRepository, paymentRepository } from "@/repositories";
+import { walletRepository, walletTransactionRepository, paymentRepository } from "@/repositories";
 
 const TEST_PREFIX = `payment-service-test-${Date.now()}`;
 const TEST_CPF = "12345678901";
@@ -27,17 +27,15 @@ describe("PaymentService", () => {
       .returning({ id: users.id });
     testUserId = user.id;
 
-    const wallet = await walletRepository.create(testUserId);
+    const wallet = await walletRepository.create(testUserId, "USER");
     testWalletId = wallet.id;
   });
 
   afterAll(async () => {
-    await db.delete(paymentWebhookEvents).where(
-      like(paymentWebhookEvents.externalEventId, "test_%"),
-    );
+    await db.delete(paymentWebhookEvents).where(like(paymentWebhookEvents.externalEventId, "test_%"));
     await db.delete(payments).where(eq(payments.customerId, testUserId));
     await db.delete(walletTransactions).where(eq(walletTransactions.walletId, testWalletId));
-    await db.delete(wallets).where(eq(wallets.userId, testUserId));
+    await db.delete(wallets).where(eq(wallets.ownerId, testUserId));
     await db.delete(users).where(like(users.email, `${TEST_PREFIX}%`));
   });
 
@@ -56,23 +54,19 @@ describe("PaymentService", () => {
         },
       };
 
-      await db.insert(paymentWebhookEvents).values({
+      await paymentRepository.createWebhookEvent({
         provider: "ASAAS",
         externalEventId: eventPayload.id,
         eventType: eventPayload.event,
         payload: eventPayload,
       });
 
-      const [existing] = await db
-        .select()
-        .from(paymentWebhookEvents)
-        .where(eq(paymentWebhookEvents.externalEventId, eventPayload.id))
-        .limit(1);
+      const existing = await paymentRepository.findWebhookEventByExternalId(eventPayload.id);
 
       expect(existing).toBeDefined();
-      expect(existing.externalEventId).toBe("test_event_001");
-      expect(existing.eventType).toBe("PAYMENT_RECEIVED");
-      expect(existing.provider).toBe("ASAAS");
+      expect(existing!.externalEventId).toBe("test_event_001");
+      expect(existing!.eventType).toBe("PAYMENT_RECEIVED");
+      expect(existing!.provider).toBe("ASAAS");
     });
 
     it("different event IDs create separate records", async () => {
@@ -91,33 +85,25 @@ describe("PaymentService", () => {
         payment: { id: "pay_a2", status: "RECEIVED", value: 20.0 },
       };
 
-      await db.insert(paymentWebhookEvents).values({
+      await paymentRepository.createWebhookEvent({
         provider: "ASAAS",
         externalEventId: event1.id,
         eventType: event1.event,
         payload: event1,
       });
-      await db.insert(paymentWebhookEvents).values({
+      await paymentRepository.createWebhookEvent({
         provider: "ASAAS",
         externalEventId: event2.id,
         eventType: event2.event,
         payload: event2,
       });
 
-      const [r1] = await db
-        .select()
-        .from(paymentWebhookEvents)
-        .where(eq(paymentWebhookEvents.externalEventId, event1.id))
-        .limit(1);
-      const [r2] = await db
-        .select()
-        .from(paymentWebhookEvents)
-        .where(eq(paymentWebhookEvents.externalEventId, event2.id))
-        .limit(1);
+      const r1 = await paymentRepository.findWebhookEventByExternalId(event1.id);
+      const r2 = await paymentRepository.findWebhookEventByExternalId(event2.id);
 
       expect(r1).toBeDefined();
       expect(r2).toBeDefined();
-      expect(r1.id).not.toBe(r2.id);
+      expect(r1!.id).not.toBe(r2!.id);
     });
   });
 
@@ -166,54 +152,56 @@ describe("PaymentService", () => {
 
   describe("walletRepository integration", () => {
     it("wallet has correct initial state after creation", async () => {
-      const wallet = await walletRepository.findByUserId(testUserId);
+      const wallet = await walletRepository.findByOwner(testUserId, "USER");
       expect(wallet).not.toBeNull();
-      expect(wallet!.userId).toBe(testUserId);
+      expect(wallet!.ownerId).toBe(testUserId);
       expect(wallet!.balance).toBeGreaterThanOrEqual(0);
       expect(wallet!.currency).toBe("BRL");
       expect(wallet!.status).toBe("ACTIVE");
     });
 
-    it("wallet updateBalance modifies balance", async () => {
-      const wallet = await walletRepository.findByUserId(testUserId);
+    it("wallet credit modifies balance", async () => {
+      const wallet = await walletRepository.findByOwner(testUserId, "USER");
       expect(wallet).not.toBeNull();
 
       const before = wallet!.balance;
-      await walletRepository.updateBalance(wallet!.id, 1000);
+      await walletRepository.credit(wallet!.id, {
+        type: "DEPOSIT",
+        direction: "CREDIT",
+        amount: 1000,
+        status: "COMPLETED",
+      });
       const after = await walletRepository.findById(wallet!.id);
       expect(after!.balance).toBe(before + 1000);
 
       // Restore
-      await walletRepository.updateBalance(wallet!.id, -1000);
+      await walletRepository.debit(wallet!.id, {
+        type: "ADJUSTMENT",
+        direction: "DEBIT",
+        amount: 1000,
+        status: "COMPLETED",
+      });
     });
   });
 
   describe("walletTransactions table", () => {
     it("can insert and query wallet transactions", async () => {
-      const wallet = await walletRepository.findByUserId(testUserId);
+      const wallet = await walletRepository.findByOwner(testUserId, "USER");
       expect(wallet).not.toBeNull();
 
-      const [tx] = await db
-        .insert(walletTransactions)
-        .values({
-          walletId: wallet!.id,
-          type: "DEPOSIT",
-          direction: "CREDIT",
-          amount: 999,
-          status: "COMPLETED",
-          reference: "Test manual insert",
-        })
-        .returning();
+      const tx = await walletRepository.credit(wallet!.id, {
+        type: "DEPOSIT",
+        direction: "CREDIT",
+        amount: 999,
+        status: "COMPLETED",
+        reference: "Test manual insert",
+      });
 
       expect(tx.id).toBeDefined();
       expect(tx.amount).toBe(999);
 
-      const [found] = await db
-        .select()
-        .from(walletTransactions)
-        .where(eq(walletTransactions.id, tx.id))
-        .limit(1);
-      expect(found).toBeDefined();
+      const found = await walletTransactionRepository.findByWalletId(wallet!.id);
+      expect(found.transactions.some((t: { id: string }) => t.id === tx.id)).toBe(true);
 
       await db.delete(walletTransactions).where(eq(walletTransactions.id, tx.id));
     });

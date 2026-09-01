@@ -41,7 +41,7 @@ export class DriverRepository implements IDriverRepository {
     const [row] = await db
       .select({ id: drivers.id, password: drivers.password, status: drivers.status })
       .from(drivers)
-      .where(eq(drivers.email, email))
+      .where(and(eq(drivers.email, email), isNull(drivers.deletedAt)))
       .limit(1);
     return row ?? null;
   }

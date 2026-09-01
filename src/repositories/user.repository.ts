@@ -49,7 +49,7 @@ export class UserRepository implements IUserRepository {
         status: users.status,
       })
       .from(users)
-      .where(eq(users.email, email));
+      .where(and(eq(users.email, email), isNull(users.deletedAt)));
     return user ?? null;
   }
 

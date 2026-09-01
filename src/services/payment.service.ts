@@ -1,29 +1,30 @@
 import { APIError } from "encore.dev/api";
 import log from "encore.dev/log";
-import { eq } from "drizzle-orm";
-import type { IPaymentRepository, PaymentRow } from "@/repositories/contracts/IPaymentRepository";
+import type { IPaymentRepository } from "@/repositories/contracts/IPaymentRepository";
 import type { IWalletRepository } from "@/repositories/contracts/IWalletRepository";
-import type { WalletDepositResponse } from "@/dto/wallet.interface";
+import type { IUserRepository } from "@/repositories/contracts/IUserRepository";
+import type { WalletDepositResponse } from "@/dto/payment.interface";
 import { paymentRepository, walletRepository, userRepository } from "@/repositories";
 import * as asaas from "@/integrations/asaas/asaas.client";
-import { parseWebhookEvent, validateWebhookToken } from "@/integrations/asaas/asaas.webhooks";
-import type { AsaasWebhookEventValidated } from "@/integrations/asaas/asaas.webhooks";
+import type { AsaasWebhookEvent } from "@/integrations/asaas/asaas.webhook-types";
+import type { WalletService } from "./wallet.service";
 import { walletService } from "./wallet.service";
-import { db } from "@/infra/database/drizzle";
-import { paymentWebhookEvents } from "@/infra/database/schema";
-import { ASAAS_WEBHOOK_EVENTS } from "@/constants/wallet";
+import { ASAAS_WEBHOOK_EVENTS } from "@/constants/asaas";
 import { isValidCpf, isValidCnpj } from "@/utils/document";
+import { isPgUniqueViolation } from "@/utils/database";
 
 export class PaymentService {
   constructor(
     private readonly paymentRepo: IPaymentRepository,
     private readonly walletRepo: IWalletRepository,
+    private readonly walletService: WalletService,
+    private readonly userRepo: IUserRepository,
   ) {}
 
   async createDeposit(userId: string, amountInCents: number): Promise<WalletDepositResponse> {
-    let wallet = await this.walletRepo.findByUserId(userId);
+    let wallet = await this.walletRepo.findByOwner(userId, "USER");
     if (!wallet) {
-      wallet = await this.walletRepo.create(userId);
+      wallet = await this.walletRepo.create(userId, "USER");
     }
 
     if (wallet.status !== "ACTIVE") {
@@ -79,31 +80,42 @@ export class PaymentService {
     };
   }
 
-  async processWebhook(rawBody: unknown, authToken: string): Promise<void> {
-    if (!validateWebhookToken(authToken)) {
-      throw APIError.unauthenticated("Token de webhook inválido.");
-    }
-
-    const event = parseWebhookEvent(rawBody);
+  async processWebhook(rawBody: unknown): Promise<void> {
+    const event = rawBody as AsaasWebhookEvent;
 
     try {
-      const [existing] = await db
-        .select({ id: paymentWebhookEvents.id })
-        .from(paymentWebhookEvents)
-        .where(eq(paymentWebhookEvents.externalEventId, event.id))
-        .limit(1);
-
+      const existing = await this.paymentRepo.findWebhookEventByExternalId(event.id);
       if (existing) return;
 
-      await db.insert(paymentWebhookEvents).values({
-        provider: "ASAAS",
-        externalEventId: event.id,
-        eventType: event.event,
-        payload: event as Record<string, unknown>,
-      });
+      try {
+        await this.paymentRepo.createWebhookEvent({
+          provider: "ASAAS",
+          externalEventId: event.id,
+          eventType: event.event,
+          payload: event as unknown as Record<string, unknown>,
+        });
+      } catch (error: unknown) {
+        if (isPgUniqueViolation(error)) return;
+        throw error;
+      }
 
-      if (event.event === ASAAS_WEBHOOK_EVENTS.PAYMENT_RECEIVED) {
-        await this.handlePaymentReceived(event);
+      switch (event.event) {
+        case ASAAS_WEBHOOK_EVENTS.PAYMENT_RECEIVED:
+          await this.handlePaymentReceived(event);
+          break;
+        case ASAAS_WEBHOOK_EVENTS.PAYMENT_OVERDUE:
+          await this.handlePaymentOverdue(event);
+          break;
+        case ASAAS_WEBHOOK_EVENTS.PAYMENT_REFUNDED:
+          await this.handlePaymentRefunded(event);
+          break;
+        case ASAAS_WEBHOOK_EVENTS.PAYMENT_CREATED:
+        case ASAAS_WEBHOOK_EVENTS.PAYMENT_CONFIRMED:
+        case ASAAS_WEBHOOK_EVENTS.PAYMENT_UPDATED:
+          log.info("Evento Asaas registrado (sem ação)", { eventId: event.id, eventType: event.event });
+          break;
+        default:
+          log.warn("Evento Asaas não tratado", { eventId: event.id, eventType: event.event });
       }
     } catch (error) {
       log.error({ error, eventId: event.id, eventType: event.event }, "Erro ao processar webhook");
@@ -111,31 +123,54 @@ export class PaymentService {
     }
   }
 
-  private async handlePaymentReceived(event: AsaasWebhookEventValidated): Promise<void> {
+  private async handlePaymentReceived(event: AsaasWebhookEvent): Promise<void> {
+    if (!event.payment) return;
+
     const payment = await this.paymentRepo.findByProviderPaymentId(event.payment.id);
+    if (!payment) return;
+    if (payment.status === "RECEIVED") return;
 
-    if (!payment) {
-      return;
-    }
-
-    if (payment.status === "RECEIVED") {
-      return;
-    }
-
-    await this.paymentRepo.updateStatus(payment.id, "RECEIVED", {
-      paidAt: new Date(),
-      providerPaymentId: event.payment.id,
+    await this.paymentRepo.confirmPaymentReceived(payment.id, payment.walletId, payment.amount, {
+      provider: "ASAAS",
+      externalEventId: event.id,
+      asaasPaymentId: event.payment.id,
+      netValue: event.payment.netValue,
     });
 
-    await walletService.credit(payment.walletId, payment.amount, "DEPOSIT", {
-      reference: "Depósito via Pix",
+    await this.walletService.invalidateCache(payment.walletId);
+  }
+
+  private async handlePaymentOverdue(event: AsaasWebhookEvent): Promise<void> {
+    if (!event.payment) return;
+
+    const payment = await this.paymentRepo.findByProviderPaymentId(event.payment.id);
+    if (!payment) return;
+    if (payment.status === "RECEIVED" || payment.status === "OVERDUE") return;
+
+    await this.paymentRepo.updateStatus(payment.id, "OVERDUE");
+
+    log.info("Pagamento marcado como vencido", { paymentId: payment.id, asaasPaymentId: event.payment.id });
+  }
+
+  private async handlePaymentRefunded(event: AsaasWebhookEvent): Promise<void> {
+    if (!event.payment) return;
+
+    const payment = await this.paymentRepo.findByProviderPaymentId(event.payment.id);
+    if (!payment) return;
+    if (payment.status === "REFUNDED") return;
+
+    await this.paymentRepo.updateStatus(payment.id, "REFUNDED");
+
+    await this.walletService.debit(payment.walletId, payment.amount, "REFUND", {
+      reference: "Estorno de depósito via Pix",
       metadata: {
         provider: "ASAAS",
         externalEventId: event.id,
         asaasPaymentId: event.payment.id,
-        netValue: event.payment.netValue,
       },
     });
+
+    log.info("Pagamento estornado e saldo debitado", { paymentId: payment.id, asaasPaymentId: event.payment.id });
   }
 
   private async getUserInfo(userId: string): Promise<{
@@ -144,7 +179,7 @@ export class PaymentService {
     cpf: string | null;
     cnpj: string | null;
   }> {
-    const user = await userRepository.findById(userId);
+    const user = await this.userRepo.findById(userId);
     if (!user) throw APIError.notFound("Usuário não encontrado.");
     return {
       fullName: user.fullName,
@@ -155,4 +190,4 @@ export class PaymentService {
   }
 }
 
-export const paymentService = new PaymentService(paymentRepository, walletRepository);
+export const paymentService = new PaymentService(paymentRepository, walletRepository, walletService, userRepository);

@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, desc } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -235,9 +235,8 @@ export const wallets = pgTable(
   "wallets",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    ownerId: uuid("owner_id").notNull(),
+    ownerType: varchar("owner_type", { length: 10 }).notNull(),
     balance: integer("balance").notNull().default(0),
     currency: varchar("currency", { length: 3 }).notNull().default("BRL"),
     status: varchar("status", { length: 20 }).$type<WalletStatus>().notNull().default("ACTIVE"),
@@ -245,10 +244,11 @@ export const wallets = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   table => [
-    uniqueIndex("wallets_user_id_unique").on(table.userId),
+    uniqueIndex("wallets_owner_unique").on(table.ownerId, table.ownerType),
     index("wallets_status_idx").on(table.status),
     sql`CONSTRAINT wallets_status_check CHECK (${table.status} IN ('ACTIVE', 'SUSPENDED', 'CLOSED'))`,
     sql`CONSTRAINT wallets_balance_check CHECK (${table.balance} >= 0)`,
+    sql`CONSTRAINT wallets_owner_type_check CHECK (${table.ownerType} IN ('USER', 'DRIVER'))`,
   ],
 );
 
@@ -271,6 +271,7 @@ export const walletTransactions = pgTable(
   },
   table => [
     index("wallet_transactions_wallet_id_idx").on(table.walletId),
+    index("wallet_transactions_wallet_id_created_at_idx").on(table.walletId, desc(table.createdAt)),
     index("wallet_transactions_ride_id_idx").on(table.rideId),
     index("wallet_transactions_type_idx").on(table.type),
     index("wallet_transactions_status_idx").on(table.status),
@@ -308,7 +309,7 @@ export const payments = pgTable(
     uniqueIndex("payments_provider_unique")
       .on(table.providerPaymentId)
       .where(sql`${table.providerPaymentId} IS NOT NULL`),
-    sql`CONSTRAINT payments_status_check CHECK (${table.status} IN ('PENDING', 'CONFIRMED', 'RECEIVED', 'CANCELLED', 'REFUNDED'))`,
+    sql`CONSTRAINT payments_status_check CHECK (${table.status} IN ('PENDING', 'CONFIRMED', 'RECEIVED', 'CANCELLED', 'REFUNDED', 'OVERDUE'))`,
   ],
 );
 

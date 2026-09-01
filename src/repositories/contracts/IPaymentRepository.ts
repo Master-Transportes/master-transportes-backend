@@ -26,6 +26,23 @@ export interface CreatePaymentData {
   description?: string;
 }
 
+export interface WebhookEventRow {
+  id: string;
+  provider: string;
+  externalEventId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  processedAt: Date | null;
+  createdAt: Date;
+}
+
+export interface CreateWebhookEventData {
+  provider: string;
+  externalEventId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+}
+
 export interface IPaymentRepository {
   create(data: CreatePaymentData): Promise<PaymentRow>;
   findById(id: string): Promise<PaymentRow | null>;
@@ -35,4 +52,12 @@ export interface IPaymentRepository {
     status: PaymentStatus,
     options?: { paidAt?: Date; providerPaymentId?: string },
   ): Promise<PaymentRow>;
+  confirmPaymentReceived(
+    paymentId: string,
+    walletId: string,
+    amount: number,
+    metadata: Record<string, unknown>,
+  ): Promise<void>;
+  findWebhookEventByExternalId(externalEventId: string): Promise<WebhookEventRow | null>;
+  createWebhookEvent(data: CreateWebhookEventData): Promise<WebhookEventRow>;
 }

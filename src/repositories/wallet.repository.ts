@@ -1,11 +1,14 @@
-import { eq, sql } from "drizzle-orm";
-import { wallets } from "@/infra/database/schema";
+import { APIError } from "encore.dev/api";
+import { and, eq, sql } from "drizzle-orm";
+import { wallets, walletTransactions } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
-import type { IWalletRepository, WalletRow } from "./contracts/IWalletRepository";
+import type { IWalletRepository, WalletRow, WalletOwnerType, CreditDebitData } from "./contracts/IWalletRepository";
+import type { WalletTransactionRow } from "./contracts/IWalletTransactionRepository";
 
 const WALLET_COLUMNS = {
   id: wallets.id,
-  userId: wallets.userId,
+  ownerId: wallets.ownerId,
+  ownerType: wallets.ownerType,
   balance: wallets.balance,
   currency: wallets.currency,
   status: wallets.status,
@@ -13,32 +16,108 @@ const WALLET_COLUMNS = {
   updatedAt: wallets.updatedAt,
 } as const;
 
+function toWalletRow(row: typeof wallets.$inferSelect): WalletRow {
+  return {
+    ...row,
+    ownerType: row.ownerType as WalletOwnerType,
+  };
+}
+
+function toTransactionRow(row: typeof walletTransactions.$inferSelect): WalletTransactionRow {
+  return {
+    id: row.id,
+    walletId: row.walletId,
+    rideId: row.rideId,
+    type: row.type,
+    direction: row.direction,
+    amount: row.amount,
+    status: row.status,
+    reference: row.reference,
+    metadata: row.metadata as Record<string, unknown> | null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export class WalletRepository implements IWalletRepository {
-  async findByUserId(userId: string): Promise<WalletRow | null> {
-    const [wallet] = await db.select(WALLET_COLUMNS).from(wallets).where(eq(wallets.userId, userId)).limit(1);
-    return wallet ?? null;
+  async findByOwner(ownerId: string, ownerType: WalletOwnerType): Promise<WalletRow | null> {
+    const [wallet] = await db
+      .select(WALLET_COLUMNS)
+      .from(wallets)
+      .where(and(eq(wallets.ownerId, ownerId), eq(wallets.ownerType, ownerType)))
+      .limit(1);
+    return wallet ? toWalletRow(wallet) : null;
   }
 
   async findById(id: string): Promise<WalletRow | null> {
     const [wallet] = await db.select(WALLET_COLUMNS).from(wallets).where(eq(wallets.id, id)).limit(1);
-    return wallet ?? null;
+    return wallet ? toWalletRow(wallet) : null;
   }
 
-  async create(userId: string): Promise<WalletRow> {
-    const [wallet] = await db.insert(wallets).values({ userId }).returning(WALLET_COLUMNS);
-    return wallet;
+  async create(ownerId: string, ownerType: WalletOwnerType): Promise<WalletRow> {
+    const [wallet] = await db.insert(wallets).values({ ownerId, ownerType }).returning(WALLET_COLUMNS);
+    return toWalletRow(wallet);
   }
 
-  async updateBalance(id: string, amount: number): Promise<WalletRow> {
-    const [wallet] = await db
-      .update(wallets)
-      .set({
-        balance: sql`${wallets.balance} + ${amount}`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.id, id))
-      .returning(WALLET_COLUMNS);
-    return wallet;
+  async credit(walletId: string, data: CreditDebitData): Promise<WalletTransactionRow> {
+    return db.transaction(async tx => {
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.id, walletId)).for("update").limit(1);
+
+      if (!wallet) throw APIError.notFound("Carteira não encontrada.");
+      if (wallet.status !== "ACTIVE") throw APIError.failedPrecondition("Carteira não está ativa.");
+
+      const [txEntry] = await tx
+        .insert(walletTransactions)
+        .values({
+          walletId,
+          rideId: data.rideId ?? null,
+          type: data.type,
+          direction: "CREDIT",
+          amount: data.amount,
+          status: data.status,
+          reference: data.reference ?? null,
+          metadata: data.metadata ?? null,
+        })
+        .returning();
+
+      await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} + ${data.amount}`, updatedAt: new Date() })
+        .where(eq(wallets.id, walletId));
+
+      return toTransactionRow(txEntry);
+    });
+  }
+
+  async debit(walletId: string, data: CreditDebitData): Promise<WalletTransactionRow> {
+    return db.transaction(async tx => {
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.id, walletId)).for("update").limit(1);
+
+      if (!wallet) throw APIError.notFound("Carteira não encontrada.");
+      if (wallet.status !== "ACTIVE") throw APIError.failedPrecondition("Carteira não está ativa.");
+      if (wallet.balance < data.amount) throw APIError.failedPrecondition("Saldo insuficiente.");
+
+      const [txEntry] = await tx
+        .insert(walletTransactions)
+        .values({
+          walletId,
+          rideId: data.rideId ?? null,
+          type: data.type,
+          direction: "DEBIT",
+          amount: data.amount,
+          status: data.status,
+          reference: data.reference ?? null,
+          metadata: data.metadata ?? null,
+        })
+        .returning();
+
+      await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} - ${data.amount}`, updatedAt: new Date() })
+        .where(eq(wallets.id, walletId));
+
+      return toTransactionRow(txEntry);
+    });
   }
 }
 

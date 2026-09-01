@@ -28,11 +28,17 @@ export class ProfileService {
   ) {}
 
   async getProfile(userID: string): Promise<UserProfileResponse> {
+    const cached = await this.userCacheService.getProfile<UserProfileResponse>(userID);
+    if (cached) return cached;
+
     const user = await this.userRepo.findById(userID);
     if (!user) {
       throw APIError.notFound("Usuário não encontrado.");
     }
-    return toProfile(user);
+
+    const profile = toProfile(user);
+    await this.userCacheService.setProfile(userID, profile as unknown as Record<string, unknown>);
+    return profile;
   }
 
   async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {

@@ -16,12 +16,12 @@ export interface AuthData {
 
 export const auth = authHandler<AuthParams, AuthData>(async params => {
   const authHeader = params.authorization;
-  if (!authHeader) throw APIError.invalidArgument("Missing 'Authorization' header.");
+  if (!authHeader) throw APIError.invalidArgument("Cabeçalho 'Authorization' ausente.");
   if (!authHeader.startsWith("Bearer "))
-    throw APIError.invalidArgument("Invalid 'Authorization' header format. Expected 'Bearer <token>'.");
+    throw APIError.invalidArgument("Formato do cabeçalho 'Authorization' inválido. Esperado 'Bearer <token>'.");
 
   const token = authHeader.replace("Bearer ", "").trim();
-  if (!token) throw APIError.invalidArgument("Token must not be empty.");
+  if (!token) throw APIError.invalidArgument("Token não pode ser vazio.");
 
   const payload = verifyToken(token);
 

@@ -1,6 +1,8 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { userService } from "@/services/user.service";
+import { walletService } from "@/services/wallet.service";
+import { paymentService } from "@/services/payment.service";
 import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
 import type {
   CancelRideParams,
@@ -16,6 +18,8 @@ import type {
   PendingRideRequestResponse,
 } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
+import type { WalletResponse, WalletBalanceResponse, WalletTransactionListResponse } from "@/dto/wallet.interface";
+import type { WalletDepositResponse } from "@/dto/payment.interface";
 
 export const login = api<SignInDTO, SignInResponse>(
   { expose: true, method: "POST", path: "/auth/login", auth: false },
@@ -59,11 +63,14 @@ export const updatePassword = api<ChangePasswordDTO, void>(
   },
 );
 
-export const listRides = api<void, RideListResponse>(
+export const listRides = api<{ page?: string; limit?: string }, RideListResponse>(
   { expose: true, method: "GET", path: "/client/rides", auth: true },
-  async () => {
+  async params => {
     const { userID } = auth.getAuthData()!;
-    return userService.getRides(userID);
+    return userService.getRides(userID, {
+      page: params.page ? Number(params.page) : undefined,
+      limit: params.limit ? Number(params.limit) : undefined,
+    });
   },
 );
 
@@ -104,5 +111,40 @@ export const cancelRideRequest = api<{ rideId: string }, void>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     await userService.cancelRideRequest(userID, payload.rideId);
+  },
+);
+
+export const getWallet = api<void, WalletResponse>(
+  { expose: true, method: "GET", path: "/client/wallet", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return walletService.getWallet(userID, "USER");
+  },
+);
+
+export const getBalance = api<void, WalletBalanceResponse>(
+  { expose: true, method: "GET", path: "/client/wallet/balance", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return walletService.getBalance(userID, "USER");
+  },
+);
+
+export const listTransactions = api<{ page?: string; limit?: string }, WalletTransactionListResponse>(
+  { expose: true, method: "GET", path: "/client/wallet/transactions", auth: true },
+  async params => {
+    const { userID } = auth.getAuthData()!;
+    return walletService.getTransactions(userID, "USER", {
+      page: params.page ? Number(params.page) : undefined,
+      limit: params.limit ? Number(params.limit) : undefined,
+    });
+  },
+);
+
+export const deposit = api<{ amountInCents: number }, WalletDepositResponse>(
+  { expose: true, method: "POST", path: "/client/wallet/deposit", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    return paymentService.createDeposit(userID, payload.amountInCents);
   },
 );

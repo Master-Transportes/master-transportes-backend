@@ -1,4 +1,4 @@
-import { and, eq, desc, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, eq, desc, inArray, isNull, count, type SQL } from "drizzle-orm";
 import { rides, rideLocations, drivers, vehicles } from "@/infra/database/schema";
 import type { RideStatus } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
@@ -8,6 +8,7 @@ import type {
   CreateRideData,
   RideActiveRow,
   RideWithDriverRow,
+  PaginatedRidesResult,
 } from "./contracts/IRideRepository";
 import { toRideDetailedRow, toRideWithDriverRow } from "./mappers";
 
@@ -50,26 +51,50 @@ export class RideRepository implements IRideRepository {
     return row ? toRideDetailedRow(row) : null;
   }
 
-  async findByClientId(clientId: string): Promise<RideDetailedRow[]> {
-    const rows = await db
-      .select(RIDE_SELECT_COLUMNS)
-      .from(rides)
-      .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(and(eq(rides.clientId, clientId), isNull(rides.deletedAt)))
-      .orderBy(desc(rides.createdAt));
+  async findByClientId(clientId: string, page: number, limit: number): Promise<PaginatedRidesResult> {
+    const offset = (page - 1) * limit;
 
-    return rows.map(toRideDetailedRow);
+    const where = and(eq(rides.clientId, clientId), isNull(rides.deletedAt));
+
+    const [countResult, rows] = await Promise.all([
+      db.select({ total: count() }).from(rides).where(where),
+      db
+        .select(RIDE_SELECT_COLUMNS)
+        .from(rides)
+        .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
+        .where(where)
+        .orderBy(desc(rides.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
+
+    return {
+      rides: rows.map(toRideDetailedRow),
+      total: countResult[0]?.total ?? 0,
+    };
   }
 
-  async findByDriverId(driverId: string): Promise<RideDetailedRow[]> {
-    const rows = await db
-      .select(RIDE_SELECT_COLUMNS)
-      .from(rides)
-      .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
-      .where(and(eq(rides.driverId, driverId), isNull(rides.deletedAt)))
-      .orderBy(desc(rides.createdAt));
+  async findByDriverId(driverId: string, page: number, limit: number): Promise<PaginatedRidesResult> {
+    const offset = (page - 1) * limit;
 
-    return rows.map(toRideDetailedRow);
+    const where = and(eq(rides.driverId, driverId), isNull(rides.deletedAt));
+
+    const [countResult, rows] = await Promise.all([
+      db.select({ total: count() }).from(rides).where(where),
+      db
+        .select(RIDE_SELECT_COLUMNS)
+        .from(rides)
+        .innerJoin(rideLocations, eq(rides.id, rideLocations.rideId))
+        .where(where)
+        .orderBy(desc(rides.createdAt))
+        .limit(limit)
+        .offset(offset),
+    ]);
+
+    return {
+      rides: rows.map(toRideDetailedRow),
+      total: countResult[0]?.total ?? 0,
+    };
   }
 
   async findActiveByClientId(clientId: string, statuses: RideStatus[]): Promise<boolean> {

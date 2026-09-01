@@ -81,10 +81,15 @@ export interface RideWithDriverRow extends RideDetailedRow {
   };
 }
 
+export interface PaginatedRidesResult {
+  rides: RideDetailedRow[];
+  total: number;
+}
+
 export interface IRideRepository {
   findById(rideId: string): Promise<RideDetailedRow | null>;
-  findByClientId(clientId: string): Promise<RideDetailedRow[]>;
-  findByDriverId(driverId: string): Promise<RideDetailedRow[]>;
+  findByClientId(clientId: string, page: number, limit: number): Promise<PaginatedRidesResult>;
+  findByDriverId(driverId: string, page: number, limit: number): Promise<PaginatedRidesResult>;
   findActiveByClientId(clientId: string, statuses: RideStatus[]): Promise<boolean>;
   findActiveByClientDetailed(clientId: string, statuses: RideStatus[]): Promise<RideWithDriverRow | null>;
   findActiveByDriverId(driverId: string, statuses: RideStatus[]): Promise<RideDetailedRow | null>;
