@@ -43,6 +43,13 @@
       "when": 1788288505050,
       "tag": "0005_minor_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788298470594,
+      "tag": "0006_add-driver-pix-key",
+      "breakpoints": true
     }
   ]
 }

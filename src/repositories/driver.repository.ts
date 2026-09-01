@@ -1,7 +1,14 @@
 import { eq, and, isNull } from "drizzle-orm";
 import { drivers } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
-import type { IDriverRepository, DriverRow, CreateDriverData, DriverWithProfile } from "./contracts/IDriverRepository";
+import type { PixKeyType } from "@/infra/database/types";
+import type {
+  IDriverRepository,
+  DriverRow,
+  CreateDriverData,
+  DriverWithProfile,
+  UpdatePixKeyData,
+} from "./contracts/IDriverRepository";
 
 export class DriverRepository implements IDriverRepository {
   async create(data: CreateDriverData): Promise<DriverRow> {
@@ -83,6 +90,23 @@ export class DriverRepository implements IDriverRepository {
 
   async updatePassword(id: string, password: string): Promise<void> {
     await db.update(drivers).set({ password, updatedAt: new Date() }).where(eq(drivers.id, id));
+  }
+
+  async findByIdWithPixKey(id: string): Promise<{ pixKey: string | null; pixKeyType: PixKeyType | null } | null> {
+    const [row] = await db
+      .select({ pixKey: drivers.pixKey, pixKeyType: drivers.pixKeyType })
+      .from(drivers)
+      .where(and(eq(drivers.id, id), isNull(drivers.deletedAt)))
+      .limit(1);
+    if (!row) return null;
+    return { pixKey: row.pixKey, pixKeyType: row.pixKeyType as PixKeyType | null };
+  }
+
+  async updatePixKey(id: string, data: UpdatePixKeyData): Promise<void> {
+    await db
+      .update(drivers)
+      .set({ pixKey: data.pixKey, pixKeyType: data.pixKeyType, updatedAt: new Date() })
+      .where(eq(drivers.id, id));
   }
 }
 

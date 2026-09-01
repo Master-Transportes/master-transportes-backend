@@ -73,6 +73,8 @@ export const drivers = pgTable(
     email: varchar("email", { length: 255 }).notNull().unique(),
     cpf: varchar("cpf", { length: 11 }),
     cnpj: varchar("cnpj", { length: 14 }),
+    pixKey: varchar("pix_key", { length: 255 }),
+    pixKeyType: varchar("pix_key_type", { length: 10 }),
     password: varchar("password").notNull(),
     status: varchar("status", { length: 20 }).$type<DriverStatus>().notNull().default("PENDING"),
     rejectionReason: varchar("rejection_reason", { length: 255 }),

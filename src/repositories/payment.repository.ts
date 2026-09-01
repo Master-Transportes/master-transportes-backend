@@ -1,4 +1,5 @@
 import { eq, sql } from "drizzle-orm";
+import { APIError } from "encore.dev/api";
 import { payments, paymentWebhookEvents, wallets, walletTransactions } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
 import type {
@@ -94,14 +95,18 @@ export class PaymentRepository implements IPaymentRepository {
     metadata: Record<string, unknown>,
   ): Promise<void> {
     await db.transaction(async tx => {
+      const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("update").limit(1);
+      if (!payment) throw APIError.notFound("Pagamento não encontrado.");
+      if (payment.status === "RECEIVED") return;
+
       await tx
         .update(payments)
         .set({ status: "RECEIVED", paidAt: new Date(), updatedAt: new Date() })
         .where(eq(payments.id, paymentId));
 
       const [wallet] = await tx.select().from(wallets).where(eq(wallets.id, walletId)).for("update").limit(1);
-      if (!wallet) throw new Error("Carteira não encontrada.");
-      if (wallet.status !== "ACTIVE") throw new Error("Carteira não está ativa.");
+      if (!wallet) throw APIError.notFound("Carteira não encontrada.");
+      if (wallet.status !== "ACTIVE") throw APIError.failedPrecondition("Carteira não está ativa.");
 
       await tx
         .insert(walletTransactions)
@@ -119,6 +124,44 @@ export class PaymentRepository implements IPaymentRepository {
       await tx
         .update(wallets)
         .set({ balance: sql`${wallets.balance} + ${amount}`, updatedAt: new Date() })
+        .where(eq(wallets.id, walletId));
+    });
+  }
+
+  async refundPayment(
+    paymentId: string,
+    walletId: string,
+    amount: number,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    await db.transaction(async tx => {
+      const [payment] = await tx.select().from(payments).where(eq(payments.id, paymentId)).for("update").limit(1);
+      if (!payment) throw APIError.notFound("Pagamento não encontrado.");
+      if (payment.status === "REFUNDED") return;
+
+      const [wallet] = await tx.select().from(wallets).where(eq(wallets.id, walletId)).for("update").limit(1);
+      if (!wallet) throw APIError.notFound("Carteira não encontrada.");
+      if (wallet.status !== "ACTIVE") throw APIError.failedPrecondition("Carteira não está ativa.");
+      if (wallet.balance < amount) throw APIError.failedPrecondition("Saldo insuficiente para estorno.");
+
+      await tx.update(payments).set({ status: "REFUNDED", updatedAt: new Date() }).where(eq(payments.id, paymentId));
+
+      await tx
+        .insert(walletTransactions)
+        .values({
+          walletId,
+          type: "REFUND",
+          direction: "DEBIT",
+          amount,
+          status: "COMPLETED",
+          reference: "Estorno de depósito via Pix",
+          metadata,
+        })
+        .returning();
+
+      await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} - ${amount}`, updatedAt: new Date() })
         .where(eq(wallets.id, walletId));
     });
   }
@@ -144,6 +187,17 @@ export class PaymentRepository implements IPaymentRepository {
       })
       .returning(WEBHOOK_EVENT_COLUMNS);
     return { ...row, payload: row.payload as Record<string, unknown> };
+  }
+
+  async markWebhookProcessed(externalEventId: string): Promise<void> {
+    await db
+      .update(paymentWebhookEvents)
+      .set({ processedAt: new Date() })
+      .where(eq(paymentWebhookEvents.externalEventId, externalEventId));
+  }
+
+  async deleteWebhookEvent(externalEventId: string): Promise<void> {
+    await db.delete(paymentWebhookEvents).where(eq(paymentWebhookEvents.externalEventId, externalEventId));
   }
 }
 

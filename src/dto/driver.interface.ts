@@ -1,8 +1,14 @@
 import type { DriverStatus } from "./shared.types.ts";
+import type { PixKeyType } from "@/infra/database/types";
 
 export interface UpdateDriverLocationDTO {
   latitude: number;
   longitude: number;
+}
+
+export interface UpdatePixKeyDTO {
+  pixKey: string;
+  pixKeyType: PixKeyType;
 }
 
 export interface AcceptOfferDTO {
@@ -76,4 +82,12 @@ export interface DriverProfileResponse {
   status: DriverStatus;
   rejectionReason: string | null;
   banReason: string | null;
+}
+
+export interface DriverWalletInformationResponse {
+  walletId: string;
+  balance: number;
+  currency: string;
+  pixKey: string | null;
+  pixKeyType: PixKeyType | null;
 }

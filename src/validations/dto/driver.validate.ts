@@ -57,3 +57,43 @@ export const ListDriverRidesSchema = z.object({
 export const CancelRideSchema = z.object({
   rideId: z.string().uuid(),
 });
+
+const PHONE_REGEX = /^\+?[1-9]\d{7,14}$/;
+
+export const PixKeySchema = z
+  .object({
+    pixKey: z.string().min(1, "Chave Pix é obrigatória."),
+    pixKeyType: z.enum(["CPF", "CNPJ", "EMAIL", "PHONE", "EVP"], {
+      error: "Tipo de chave Pix inválido.",
+    }),
+  })
+  .superRefine((data, ctx) => {
+    const key = data.pixKey.trim();
+    switch (data.pixKeyType) {
+      case "CPF":
+        if (!/^\d{11}$/.test(key)) {
+          ctx.addIssue({ code: "custom", message: "CPF deve conter 11 dígitos.", path: ["pixKey"] });
+        }
+        break;
+      case "CNPJ":
+        if (!/^\d{14}$/.test(key)) {
+          ctx.addIssue({ code: "custom", message: "CNPJ deve conter 14 dígitos.", path: ["pixKey"] });
+        }
+        break;
+      case "EMAIL":
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
+          ctx.addIssue({ code: "custom", message: "E-mail inválido.", path: ["pixKey"] });
+        }
+        break;
+      case "PHONE":
+        if (!PHONE_REGEX.test(key)) {
+          ctx.addIssue({ code: "custom", message: "Telefone inválido.", path: ["pixKey"] });
+        }
+        break;
+      case "EVP":
+        if (!z.string().uuid().safeParse(key).success) {
+          ctx.addIssue({ code: "custom", message: "Chave aleatória (EVP) inválida.", path: ["pixKey"] });
+        }
+        break;
+    }
+  });

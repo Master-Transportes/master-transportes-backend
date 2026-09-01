@@ -46,6 +46,30 @@ export interface AsaasPaymentStatus {
   status: string;
 }
 
+export type AsaasTransferStatus =
+  | "PENDING"
+  | "IN_BANK_PROCESSING"
+  | "DONE"
+  | "CANCELLED"
+  | "FAILED"
+  | "REFUNDED"
+  | "BLOCKED"
+  | "FORBIDDEN"
+  | "DELETED";
+
+export interface AsaasTransfer {
+  id: string;
+  object: string;
+  status: AsaasTransferStatus;
+  value: number;
+  pixAddressKey: string;
+  pixAddressKeyType: string;
+  transferDate: string;
+  description: string | null;
+  externalReference: string | null;
+  dateCreated: string;
+}
+
 export interface AsaasError {
   errors: Array<{
     code: string;

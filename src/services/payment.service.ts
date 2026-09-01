@@ -2,14 +2,25 @@ import { APIError } from "encore.dev/api";
 import log from "encore.dev/log";
 import type { IPaymentRepository } from "@/repositories/contracts/IPaymentRepository";
 import type { IWalletRepository } from "@/repositories/contracts/IWalletRepository";
+import type { IWalletTransactionRepository } from "@/repositories/contracts/IWalletTransactionRepository";
 import type { IUserRepository } from "@/repositories/contracts/IUserRepository";
+import type { IDriverRepository } from "@/repositories/contracts/IDriverRepository";
 import type { WalletDepositResponse } from "@/dto/payment.interface";
-import { paymentRepository, walletRepository, userRepository } from "@/repositories";
-import * as asaas from "@/integrations/asaas/asaas.client";
+import type { PayoutResponse } from "@/dto/wallet.interface";
+import {
+  paymentRepository,
+  walletRepository,
+  walletTransactionRepository,
+  userRepository,
+  driverRepository,
+} from "@/repositories";
+import { asaasClient, type IAsaasClient } from "@/integrations/asaas/asaas.client";
 import type { AsaasWebhookEvent } from "@/integrations/asaas/asaas.webhook-types";
 import type { WalletService } from "./wallet.service";
 import { walletService } from "./wallet.service";
 import { ASAAS_WEBHOOK_EVENTS } from "@/constants/asaas";
+import { validateOrThrow } from "@/validations/schema-validator";
+import { DepositSchema, PayoutSchema } from "@/validations/dto/wallet.validate";
 import { isValidCpf, isValidCnpj } from "@/utils/document";
 import { isPgUniqueViolation } from "@/utils/database";
 
@@ -17,11 +28,16 @@ export class PaymentService {
   constructor(
     private readonly paymentRepo: IPaymentRepository,
     private readonly walletRepo: IWalletRepository,
+    private readonly walletTxRepo: IWalletTransactionRepository,
     private readonly walletService: WalletService,
     private readonly userRepo: IUserRepository,
+    private readonly driverRepo: IDriverRepository,
+    private readonly asaas: IAsaasClient,
   ) {}
 
   async createDeposit(userId: string, amountInCents: number): Promise<WalletDepositResponse> {
+    const { amountInCents: validatedAmount } = validateOrThrow(DepositSchema, { amountInCents });
+
     let wallet = await this.walletRepo.findByOwner(userId, "USER");
     if (!wallet) {
       wallet = await this.walletRepo.create(userId, "USER");
@@ -33,7 +49,7 @@ export class PaymentService {
 
     const user = await this.getUserInfo(userId);
 
-    let asaasCustomer = await asaas.findCustomerByExternalReference(userId);
+    let asaasCustomer = await this.asaas.findCustomerByExternalReference(userId);
 
     if (!asaasCustomer) {
       const cpfCnpj = user.cpf ?? user.cnpj ?? "";
@@ -41,7 +57,7 @@ export class PaymentService {
         throw APIError.failedPrecondition("CPF/CNPJ do usuário é inválido.");
       }
 
-      asaasCustomer = await asaas.createCustomer({
+      asaasCustomer = await this.asaas.createCustomer({
         name: user.fullName,
         cpfCnpj,
         email: user.email,
@@ -52,10 +68,10 @@ export class PaymentService {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 1);
 
-    const payment = await asaas.createPayment({
+    const payment = await this.asaas.createPayment({
       customer: asaasCustomer.id,
       billingType: "PIX",
-      value: amountInCents / 100,
+      value: Number((validatedAmount / 100).toFixed(2)),
       dueDate: dueDate.toISOString().split("T")[0],
       description: `Depósito na carteira - ${user.fullName}`,
       externalReference: `dep_${wallet.id}_${Date.now()}`,
@@ -64,19 +80,74 @@ export class PaymentService {
     const dbPayment = await this.paymentRepo.create({
       walletId: wallet.id,
       customerId: userId,
-      amount: amountInCents,
+      amount: validatedAmount,
       providerPaymentId: payment.id,
-      description: `Depósito via Pix`,
+      description: "Depósito via Pix",
     });
 
-    const qrCode = await asaas.getPixQrCode(payment.id);
+    const qrCode = await this.asaas.getPixQrCode(payment.id);
 
     return {
       paymentId: dbPayment.id,
       qrCodeBase64: qrCode.encodedImage,
       pixPayload: qrCode.payload,
       expirationDate: qrCode.expirationDate,
-      amountInCents,
+      amountInCents: validatedAmount,
+    };
+  }
+
+  async requestPayout(driverId: string, amountInCents: number): Promise<PayoutResponse> {
+    const { amountInCents: validatedAmount } = validateOrThrow(PayoutSchema, { amountInCents });
+
+    const pix = await this.driverRepo.findByIdWithPixKey(driverId);
+    if (!pix) throw APIError.notFound("Motorista não encontrado.");
+    if (!pix.pixKey || !pix.pixKeyType) {
+      throw APIError.failedPrecondition("Cadastre uma chave Pix antes de solicitar o saque.");
+    }
+
+    let wallet = await this.walletRepo.findByOwner(driverId, "DRIVER");
+    if (!wallet) {
+      wallet = await this.walletRepo.create(driverId, "DRIVER");
+    }
+    if (wallet.status !== "ACTIVE") {
+      throw APIError.failedPrecondition("Carteira não está ativa.");
+    }
+
+    const txEntry = await this.walletRepo.debit(wallet.id, {
+      type: "PAYOUT",
+      direction: "DEBIT",
+      amount: validatedAmount,
+      status: "PENDING",
+      reference: "Saque via Pix",
+    });
+
+    let transfer;
+    try {
+      transfer = await this.asaas.createTransfer({
+        value: Number((validatedAmount / 100).toFixed(2)),
+        pixAddressKey: pix.pixKey,
+        pixAddressKeyType: pix.pixKeyType,
+        description: "Saque via Pix",
+        externalReference: txEntry.id,
+      });
+
+      await this.walletRepo.attachTransferReference(txEntry.id, transfer.id);
+      await this.walletRepo.completePendingTransaction(txEntry.id);
+    } catch (error: unknown) {
+      await this.walletRepo.reverseTransaction(txEntry.id);
+      await this.walletService.invalidateCache(wallet.id);
+      log.error({ error, driverId }, "Falha ao criar transferência Pix no Asaas");
+      throw APIError.internal("Não foi possível processar o saque no momento. Tente novamente.");
+    }
+
+    await this.walletService.invalidateCache(wallet.id);
+
+    const updatedWallet = await this.walletRepo.findById(wallet.id);
+
+    return {
+      transactionId: txEntry.id,
+      amountInCents: validatedAmount,
+      newBalance: updatedWallet!.balance,
     };
   }
 
@@ -85,18 +156,20 @@ export class PaymentService {
 
     try {
       const existing = await this.paymentRepo.findWebhookEventByExternalId(event.id);
-      if (existing) return;
+      if (existing?.processedAt) return;
 
-      try {
-        await this.paymentRepo.createWebhookEvent({
-          provider: "ASAAS",
-          externalEventId: event.id,
-          eventType: event.event,
-          payload: event as unknown as Record<string, unknown>,
-        });
-      } catch (error: unknown) {
-        if (isPgUniqueViolation(error)) return;
-        throw error;
+      if (!existing) {
+        try {
+          await this.paymentRepo.createWebhookEvent({
+            provider: "ASAAS",
+            externalEventId: event.id,
+            eventType: event.event,
+            payload: event as unknown as Record<string, unknown>,
+          });
+        } catch (error: unknown) {
+          if (isPgUniqueViolation(error)) return;
+          throw error;
+        }
       }
 
       switch (event.event) {
@@ -109,6 +182,14 @@ export class PaymentService {
         case ASAAS_WEBHOOK_EVENTS.PAYMENT_REFUNDED:
           await this.handlePaymentRefunded(event);
           break;
+        case ASAAS_WEBHOOK_EVENTS.TRANSFER_DONE:
+          await this.handleTransferSettled(event, "COMPLETED");
+          break;
+        case ASAAS_WEBHOOK_EVENTS.TRANSFER_FAILED:
+        case ASAAS_WEBHOOK_EVENTS.TRANSFER_CANCELLED:
+        case ASAAS_WEBHOOK_EVENTS.TRANSFER_REFUNDED:
+          await this.handleTransferSettled(event, "REVERSED");
+          break;
         case ASAAS_WEBHOOK_EVENTS.PAYMENT_CREATED:
         case ASAAS_WEBHOOK_EVENTS.PAYMENT_CONFIRMED:
         case ASAAS_WEBHOOK_EVENTS.PAYMENT_UPDATED:
@@ -117,7 +198,12 @@ export class PaymentService {
         default:
           log.warn("Evento Asaas não tratado", { eventId: event.id, eventType: event.event });
       }
+
+      await this.paymentRepo.markWebhookProcessed(event.id);
     } catch (error) {
+      if (error && !isPgUniqueViolation(error)) {
+        await this.paymentRepo.deleteWebhookEvent(event.id).catch(() => undefined);
+      }
       log.error({ error, eventId: event.id, eventType: event.event }, "Erro ao processar webhook");
       throw error;
     }
@@ -159,18 +245,36 @@ export class PaymentService {
     if (!payment) return;
     if (payment.status === "REFUNDED") return;
 
-    await this.paymentRepo.updateStatus(payment.id, "REFUNDED");
-
-    await this.walletService.debit(payment.walletId, payment.amount, "REFUND", {
-      reference: "Estorno de depósito via Pix",
-      metadata: {
-        provider: "ASAAS",
-        externalEventId: event.id,
-        asaasPaymentId: event.payment.id,
-      },
+    await this.paymentRepo.refundPayment(payment.id, payment.walletId, payment.amount, {
+      provider: "ASAAS",
+      externalEventId: event.id,
+      asaasPaymentId: event.payment.id,
     });
 
+    await this.walletService.invalidateCache(payment.walletId);
+
     log.info("Pagamento estornado e saldo debitado", { paymentId: payment.id, asaasPaymentId: event.payment.id });
+  }
+
+  private async handleTransferSettled(event: AsaasWebhookEvent, targetStatus: "COMPLETED" | "REVERSED"): Promise<void> {
+    if (!event.transfer) return;
+
+    const tx = await this.walletTxRepo.findByAsaasTransferId(event.transfer.id);
+    if (!tx) return;
+
+    if (targetStatus === "COMPLETED") {
+      await this.walletRepo.completePendingTransaction(tx.id);
+    } else {
+      await this.walletRepo.reverseTransaction(tx.id);
+    }
+
+    await this.walletService.invalidateCache(tx.walletId);
+
+    log.info("Transferência Asaas conciliada", {
+      transferId: event.transfer.id,
+      transactionId: tx.id,
+      status: targetStatus,
+    });
   }
 
   private async getUserInfo(userId: string): Promise<{
@@ -190,4 +294,12 @@ export class PaymentService {
   }
 }
 
-export const paymentService = new PaymentService(paymentRepository, walletRepository, walletService, userRepository);
+export const paymentService = new PaymentService(
+  paymentRepository,
+  walletRepository,
+  walletTransactionRepository,
+  walletService,
+  userRepository,
+  driverRepository,
+  asaasClient,
+);

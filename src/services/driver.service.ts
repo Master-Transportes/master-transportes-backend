@@ -10,6 +10,7 @@ import {
   ChangeDriverPasswordSchema,
   CompleteRideSchema,
   ListDriverRidesSchema,
+  PixKeySchema,
   RegisterDriverSchema,
   UpdateDriverLocationSchema,
   UpdateDriverProfileSchema,
@@ -17,7 +18,10 @@ import {
 import type { ChangePasswordDTO, RegisterDriverDTO, UpdateProfileDTO } from "@/dto/user.interface";
 import type { SignInDTO, SignInResponse, RefreshResponse } from "@/dto/access.interface";
 import type { IDriverRepository } from "@/repositories/contracts/IDriverRepository";
-import type { DriverProfileResponse, RideDetailedInfo } from "@/dto/driver.interface";
+import type { DriverProfileResponse, RideDetailedInfo, DriverWalletInformationResponse } from "@/dto/driver.interface";
+import type { UpdatePixKeyDTO } from "@/dto/driver.interface";
+import type { WalletService } from "./wallet.service";
+import { walletService } from "./wallet.service";
 import type { IRideRepository } from "@/repositories/contracts/IRideRepository";
 import type { ISessionStore } from "@/cache/contracts/ISessionStore";
 import type { IDriverCache } from "@/cache/contracts/IDriverCache";
@@ -58,6 +62,7 @@ export class DriverService {
     private readonly rideEventPublisher: IRideEventPublisher,
     private readonly sessionStore: ISessionStore,
     private readonly driverCacheService: IDriverCache,
+    private readonly walletService: WalletService,
   ) {}
 
   async register(payload: RegisterDriverDTO): Promise<{ id: string }> {
@@ -225,6 +230,39 @@ export class DriverService {
     await this.driverLocationCache.saveLocation(userID, latitude, longitude);
   }
 
+  async updatePixKey(driverId: string, payload: UpdatePixKeyDTO): Promise<DriverWalletInformationResponse> {
+    const validated = validateOrThrow(PixKeySchema, payload);
+
+    const driver = await this.driverRepo.findById(driverId);
+    if (!driver) throw APIError.notFound("Motorista não encontrado.");
+
+    await this.driverRepo.updatePixKey(driverId, {
+      pixKey: validated.pixKey.trim(),
+      pixKeyType: validated.pixKeyType,
+    });
+
+    await this.driverCacheService.invalidate(driverId);
+
+    return this.getWalletInformation(driverId);
+  }
+
+  async getWalletInformation(driverId: string): Promise<DriverWalletInformationResponse> {
+    const [wallet, pix] = await Promise.all([
+      this.walletService.getWallet(driverId, "DRIVER"),
+      this.driverRepo.findByIdWithPixKey(driverId),
+    ]);
+
+    if (!pix) throw APIError.notFound("Motorista não encontrado.");
+
+    return {
+      walletId: wallet.id,
+      balance: wallet.balance,
+      currency: wallet.currency,
+      pixKey: pix.pixKey,
+      pixKeyType: pix.pixKeyType,
+    };
+  }
+
   async goOnline(userID: string): Promise<DriverStatusResponse> {
     await this.driverLocationCache.goOnline(userID);
     return this.getStatus(userID);
@@ -322,4 +360,5 @@ export const driverService = new DriverService(
   rideEventPublisher,
   sessionStore,
   driverCache,
+  walletService,
 );

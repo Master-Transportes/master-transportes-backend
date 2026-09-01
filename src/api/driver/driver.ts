@@ -2,6 +2,7 @@ import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { driverService } from "@/services/driver.service";
 import { walletService } from "@/services/wallet.service";
+import { paymentService } from "@/services/payment.service";
 import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
 import type {
   ChangePasswordDTO,
@@ -21,6 +22,8 @@ import type {
   DriverStatusResponse,
   DriverProfileResponse,
   DriverRideListResponse,
+  UpdatePixKeyDTO,
+  DriverWalletInformationResponse,
 } from "@/dto/driver.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
 import type {
@@ -77,6 +80,22 @@ export const updateLocation = api<UpdateDriverLocationDTO, void>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     await driverService.updateLocation(userID, payload);
+  },
+);
+
+export const updatePixKey = api<UpdatePixKeyDTO, DriverWalletInformationResponse>(
+  { expose: true, method: "PUT", path: "/driver/pix-key", auth: true },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.updatePixKey(userID, payload);
+  },
+);
+
+export const getInformationWallet = api<void, DriverWalletInformationResponse>(
+  { expose: true, method: "GET", path: "/driver/wallet/information", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.getWalletInformation(userID);
   },
 );
 
@@ -186,6 +205,6 @@ export const requestPayout = api<DepositParams, PayoutResponse>(
   { expose: true, method: "POST", path: "/driver/wallet/payout", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;
-    return walletService.requestPayout(userID, "DRIVER", payload.amountInCents);
+    return paymentService.requestPayout(userID, payload.amountInCents);
   },
 );

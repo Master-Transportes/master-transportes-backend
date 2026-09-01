@@ -35,4 +35,7 @@ export interface IWalletRepository {
   create(ownerId: string, ownerType: WalletOwnerType): Promise<WalletRow>;
   credit(walletId: string, data: CreditDebitData): Promise<WalletTransactionRow>;
   debit(walletId: string, data: CreditDebitData): Promise<WalletTransactionRow>;
+  attachTransferReference(txId: string, asaasTransferId: string): Promise<void>;
+  completePendingTransaction(txId: string): Promise<boolean>;
+  reverseTransaction(txId: string): Promise<boolean>;
 }

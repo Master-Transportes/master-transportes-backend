@@ -183,46 +183,6 @@ describe("WalletService", () => {
     });
   });
 
-  describe("requestPayout()", () => {
-    it("debits wallet and returns new balance", async () => {
-      await walletService.getWallet(testUserId, "USER");
-      const before = await walletService.getBalance(testUserId, "USER");
-
-      const result = await walletService.requestPayout(testUserId, "USER", 1500);
-
-      expect(result.transactionId).toBeDefined();
-      expect(result.amountInCents).toBe(1500);
-      expect(result.newBalance).toBe(before.balance - 1500);
-    });
-
-    it("rejects payout when insufficient balance", async () => {
-      await expect(walletService.requestPayout(testUserId, "USER", 999999)).rejects.toThrow("Saldo insuficiente");
-    });
-
-    it("rejects payout below minimum amount", async () => {
-      await expect(walletService.requestPayout(testUserId, "USER", 500)).rejects.toThrow();
-    });
-
-    it("creates wallet on first access for payout", async () => {
-      const email2 = `${TEST_PREFIX}-payout@test.com`;
-      const hashedPassword = hashSync(DEFAULT_PASSWORD, 10);
-      const [user] = await db
-        .insert(users)
-        .values({
-          fullName: "Payout Test User",
-          email: email2,
-          cpf: TEST_CPF,
-          password: hashedPassword,
-          role: "CLIENT",
-        })
-        .returning({ id: users.id });
-
-      await expect(walletService.requestPayout(user.id, "USER", 5000)).rejects.toThrow("Saldo insuficiente");
-
-      await db.delete(users).where(eq(users.id, user.id));
-    });
-  });
-
   describe("getTransactions()", () => {
     it("returns paginated transactions", async () => {
       const result = await walletService.getTransactions(testUserId, "USER", { page: 1, limit: 10 });

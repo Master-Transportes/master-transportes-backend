@@ -35,5 +35,5 @@ export interface IWalletTransactionRepository {
     walletId: string,
     options?: { page?: number; limit?: number },
   ): Promise<{ transactions: WalletTransactionRow[]; total: number }>;
-  findByExternalEventId(provider: string, externalEventId: string): Promise<WalletTransactionRow | null>;
+  findByAsaasTransferId(asaasTransferId: string): Promise<WalletTransactionRow | null>;
 }

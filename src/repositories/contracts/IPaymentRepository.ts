@@ -58,6 +58,9 @@ export interface IPaymentRepository {
     amount: number,
     metadata: Record<string, unknown>,
   ): Promise<void>;
+  refundPayment(paymentId: string, walletId: string, amount: number, metadata: Record<string, unknown>): Promise<void>;
   findWebhookEventByExternalId(externalEventId: string): Promise<WebhookEventRow | null>;
   createWebhookEvent(data: CreateWebhookEventData): Promise<WebhookEventRow>;
+  markWebhookProcessed(externalEventId: string): Promise<void>;
+  deleteWebhookEvent(externalEventId: string): Promise<void>;
 }

@@ -92,10 +92,25 @@ export interface AsaasWebhookAccount {
   ownerId: string | null;
 }
 
+export interface AsaasWebhookTransfer {
+  id: string;
+  object: string;
+  status: string;
+  value: number;
+  pixAddressKey: string;
+  pixAddressKeyType: string;
+  transferDate: string | null;
+  description: string | null;
+  externalReference: string | null;
+  dateCreated: string;
+  deleted: boolean;
+}
+
 export interface AsaasWebhookEvent {
   id: string;
   event: string;
   dateCreated: string;
   account: AsaasWebhookAccount;
-  payment: AsaasWebhookPayment;
+  payment: AsaasWebhookPayment | null;
+  transfer: AsaasWebhookTransfer | null;
 }

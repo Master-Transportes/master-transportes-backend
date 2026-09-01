@@ -1,4 +1,12 @@
-import type { AsaasCustomer, AsaasPayment, AsaasPixQrCode, AsaasPaymentStatus, AsaasError } from "./asaas.types";
+import type {
+  AsaasCustomer,
+  AsaasPayment,
+  AsaasPixQrCode,
+  AsaasPaymentStatus,
+  AsaasTransfer,
+  AsaasError,
+} from "./asaas.types";
+import type { PixKeyType } from "@/infra/database/types";
 
 const BASE_URL = process.env.ASAAS_BASE_URL ?? "https://api-sandbox.asaas.com/v3";
 const API_KEY = process.env.ASAAS_KEY_SANDBOX ?? "";
@@ -86,3 +94,47 @@ export async function getPixQrCode(paymentId: string): Promise<AsaasPixQrCode> {
 export async function getPaymentStatus(paymentId: string): Promise<AsaasPaymentStatus> {
   return request<AsaasPaymentStatus>({ method: "GET", path: `/payments/${paymentId}/status` });
 }
+
+export async function createTransfer(data: {
+  value: number;
+  pixAddressKey: string;
+  pixAddressKeyType: PixKeyType;
+  description?: string;
+  externalReference?: string;
+}): Promise<AsaasTransfer> {
+  return request<AsaasTransfer>({ method: "POST", path: "/transfers", body: data });
+}
+
+export interface IAsaasClient {
+  createCustomer(data: {
+    name: string;
+    cpfCnpj: string;
+    email?: string;
+    externalReference?: string;
+  }): Promise<AsaasCustomer>;
+  findCustomerByExternalReference(externalReference: string): Promise<AsaasCustomer | null>;
+  createPayment(data: {
+    customer: string;
+    billingType: "PIX";
+    value: number;
+    dueDate: string;
+    description?: string;
+    externalReference?: string;
+  }): Promise<AsaasPayment>;
+  getPixQrCode(paymentId: string): Promise<AsaasPixQrCode>;
+  createTransfer(data: {
+    value: number;
+    pixAddressKey: string;
+    pixAddressKeyType: PixKeyType;
+    description?: string;
+    externalReference?: string;
+  }): Promise<AsaasTransfer>;
+}
+
+export const asaasClient: IAsaasClient = {
+  createCustomer,
+  findCustomerByExternalReference,
+  createPayment,
+  getPixQrCode,
+  createTransfer,
+};

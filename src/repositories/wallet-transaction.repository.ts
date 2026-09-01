@@ -68,13 +68,11 @@ export class WalletTransactionRepository implements IWalletTransactionRepository
     };
   }
 
-  async findByExternalEventId(provider: string, externalEventId: string): Promise<WalletTransactionRow | null> {
+  async findByAsaasTransferId(asaasTransferId: string): Promise<WalletTransactionRow | null> {
     const [row] = await db
       .select()
       .from(walletTransactions)
-      .where(
-        sql`${walletTransactions.metadata}->>'provider' = ${provider} AND ${walletTransactions.metadata}->>'externalEventId' = ${externalEventId}`,
-      )
+      .where(sql`${walletTransactions.metadata}->>'asaasTransferId' = ${asaasTransferId}`)
       .limit(1);
     return row ? toRow(row) : null;
   }

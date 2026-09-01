@@ -7,7 +7,11 @@ export const ListTransactionsSchema = z.object({
 });
 
 export const DepositSchema = z.object({
-  amountInCents: z.number().int().positive("Valor deve ser maior que zero"),
+  amountInCents: z
+    .number()
+    .int("Valor deve ser um número inteiro")
+    .positive("Valor deve ser maior que zero")
+    .max(100_000_000, "Valor máximo para depósito é R$ 1.000.000,00"),
 });
 
 export const PayoutSchema = z.object({

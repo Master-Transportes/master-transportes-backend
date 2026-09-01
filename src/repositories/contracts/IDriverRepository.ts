@@ -1,4 +1,5 @@
 import type { DriverStatus } from "@/infra/database/schema";
+import type { PixKeyType } from "@/infra/database/types";
 
 export interface CreateDriverData {
   fullName: string;
@@ -31,6 +32,11 @@ export interface DriverWithProfile {
   deletedAt: Date | null;
 }
 
+export interface UpdatePixKeyData {
+  pixKey: string;
+  pixKeyType: PixKeyType;
+}
+
 export interface IDriverRepository {
   create(data: CreateDriverData): Promise<DriverRow>;
   findById(id: string): Promise<DriverWithProfile | null>;
@@ -39,4 +45,6 @@ export interface IDriverRepository {
   findPasswordById(id: string): Promise<{ id: string; password: string } | null>;
   updateProfile(id: string, data: { fullName?: string; email?: string }): Promise<DriverWithProfile | null>;
   updatePassword(id: string, password: string): Promise<void>;
+  findByIdWithPixKey(id: string): Promise<{ pixKey: string | null; pixKeyType: PixKeyType | null } | null>;
+  updatePixKey(id: string, data: UpdatePixKeyData): Promise<void>;
 }

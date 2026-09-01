@@ -1,6 +1,6 @@
 import { APIError } from "encore.dev/api";
 import { validateOrThrow } from "@/validations/schema-validator";
-import { ListTransactionsSchema, PayoutSchema } from "@/validations/dto/wallet.validate";
+import { ListTransactionsSchema } from "@/validations/dto/wallet.validate";
 import type { WalletTransactionType } from "@/infra/database/types";
 import type { IWalletRepository, WalletRow, WalletOwnerType } from "@/repositories/contracts/IWalletRepository";
 import type {
@@ -13,7 +13,6 @@ import type {
   WalletBalanceResponse,
   WalletTransactionItem,
   WalletTransactionListResponse,
-  PayoutResponse,
 } from "@/dto/wallet.interface";
 import { walletRepository, walletTransactionRepository } from "@/repositories";
 import { walletCache } from "@/cache";
@@ -140,23 +139,6 @@ export class WalletService {
     await this.walletCache.invalidate(walletId);
 
     return txEntry;
-  }
-
-  async requestPayout(ownerId: string, ownerType: WalletOwnerType, amountInCents: number): Promise<PayoutResponse> {
-    const validated = validateOrThrow(PayoutSchema, { amountInCents });
-    const wallet = await this.findOrCreateWallet(ownerId, ownerType);
-
-    const txEntry = await this.debit(wallet.id, validated.amountInCents, "PAYOUT", {
-      reference: "Saque via Pix",
-    });
-
-    const updatedWallet = await this.walletRepo.findById(wallet.id);
-
-    return {
-      transactionId: txEntry.id,
-      amountInCents: validated.amountInCents,
-      newBalance: updatedWallet!.balance,
-    };
   }
 
   async invalidateCache(walletId: string): Promise<void> {

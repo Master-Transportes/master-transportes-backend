@@ -119,6 +119,61 @@ export class WalletRepository implements IWalletRepository {
       return toTransactionRow(txEntry);
     });
   }
+
+  async completePendingTransaction(txId: string): Promise<boolean> {
+    return db.transaction(async tx => {
+      const [txEntry] = await tx
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.id, txId))
+        .for("update")
+        .limit(1);
+      if (!txEntry) throw APIError.notFound("Transação não encontrada.");
+      if (txEntry.status !== "PENDING") return false;
+
+      await tx
+        .update(walletTransactions)
+        .set({ status: "COMPLETED", updatedAt: new Date() })
+        .where(eq(walletTransactions.id, txId));
+
+      return true;
+    });
+  }
+
+  async attachTransferReference(txId: string, asaasTransferId: string): Promise<void> {
+    await db
+      .update(walletTransactions)
+      .set({
+        metadata: sql`jsonb_set(COALESCE(${walletTransactions.metadata}, '{}'::jsonb), '{asaasTransferId}', to_jsonb(${asaasTransferId}::text))`,
+        updatedAt: new Date(),
+      })
+      .where(eq(walletTransactions.id, txId));
+  }
+
+  async reverseTransaction(txId: string): Promise<boolean> {
+    return db.transaction(async tx => {
+      const [txEntry] = await tx
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.id, txId))
+        .for("update")
+        .limit(1);
+      if (!txEntry) throw APIError.notFound("Transação não encontrada.");
+      if (txEntry.status !== "PENDING") return false;
+
+      await tx
+        .update(walletTransactions)
+        .set({ status: "REVERSED", updatedAt: new Date() })
+        .where(eq(walletTransactions.id, txId));
+
+      await tx
+        .update(wallets)
+        .set({ balance: sql`${wallets.balance} + ${txEntry.amount}`, updatedAt: new Date() })
+        .where(eq(wallets.id, txEntry.walletId));
+
+      return true;
+    });
+  }
 }
 
 export const walletRepository = new WalletRepository();
