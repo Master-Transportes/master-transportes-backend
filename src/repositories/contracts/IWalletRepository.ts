@@ -12,5 +12,7 @@ export interface WalletRow {
 
 export interface IWalletRepository {
   findByUserId(userId: string): Promise<WalletRow | null>;
+  findById(id: string): Promise<WalletRow | null>;
   create(userId: string): Promise<WalletRow>;
+  updateBalance(id: string, amount: number): Promise<WalletRow>;
 }

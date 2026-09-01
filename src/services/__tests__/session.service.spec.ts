@@ -1,50 +1,74 @@
-import { describe, beforeAll, afterAll, beforeEach, afterEach, expect, it } from "bun:test";
-import { eq, like } from "drizzle-orm";
+import { describe, beforeAll, afterAll, afterEach, expect, it } from "bun:test";
+import { eq } from "drizzle-orm";
 import { sessionStore } from "@/cache";
 import { redis, CACHE_KEYS } from "@/infra/cache";
 import { db } from "@/infra/database/drizzle";
 import { users } from "@/infra/database/schema";
 
-const TEST_PREFIX = `session-test-${Date.now()}`;
-let testUserId: string;
-let testUserEmail: string;
+const TEST_PREFIX = `session-${Date.now()}`;
+const TEST_CPF = "12345678901";
+
+const createdUserIds: string[] = [];
+const createdEmails: string[] = [];
+const createdSessionIds: string[] = [];
+
+function trackSession(id: string) {
+  createdSessionIds.push(id);
+}
 
 describe("RedisSessionStore", () => {
-  let createdSessionIds: string[] = [];
-
-  afterEach(async () => {
-    await Promise.all(createdSessionIds.map(id => sessionStore.revoke(id)));
-    createdSessionIds = [];
-  });
+  const mainEmail = `${TEST_PREFIX}@test.com`;
+  let mainUserId: string;
 
   beforeAll(async () => {
-    testUserEmail = `${TEST_PREFIX}@test.com`;
     const [user] = await db
       .insert(users)
       .values({
         fullName: "Session Test User",
-        email: testUserEmail,
+        email: mainEmail,
+        cpf: TEST_CPF,
         password: "hash",
         role: "CLIENT",
       })
       .returning({ id: users.id });
-    testUserId = user.id;
+    mainUserId = user.id;
+    trackUser(user.id, mainEmail);
   });
 
   afterAll(async () => {
-    await Promise.all([
-      db.delete(users).where(like(users.email, `${TEST_PREFIX}%`)),
-      redis.del(CACHE_KEYS.USER_SESSIONS(testUserId)),
-    ]);
+    await Promise.all(
+      createdSessionIds.map(id => sessionStore.revoke(id).catch(() => {})),
+    );
+
+    await Promise.all(
+      createdUserIds.flatMap(userId => [
+        redis.del(CACHE_KEYS.USER_SESSIONS(userId)),
+      ]),
+    );
+
+    await Promise.all(
+      createdEmails.map(email =>
+        db.delete(users).where(eq(users.email, email)),
+      ),
+    );
   });
+
+  afterEach(async () => {
+    createdSessionIds.length = 0;
+  });
+
+  function trackUser(id: string, email: string) {
+    createdUserIds.push(id);
+    createdEmails.push(email);
+  }
 
   describe("create()", () => {
     it("creates a session and returns sessionId + refreshToken", async () => {
       const result = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(result.sessionId);
+      trackSession(result.sessionId);
 
       expect(result).toHaveProperty("sessionId");
       expect(typeof result.sessionId).toBe("string");
@@ -55,16 +79,16 @@ describe("RedisSessionStore", () => {
 
       const session = await sessionStore.get(result.sessionId);
       expect(session).not.toBeNull();
-      expect(session!.userId).toBe(testUserId);
+      expect(session!.userId).toBe(mainUserId);
       expect(session!.userType).toBe("CLIENT");
     });
 
     it("stores session with 30-day TTL and expiry timestamp", async () => {
       const result = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(result.sessionId);
+      trackSession(result.sessionId);
 
       const session = await sessionStore.get(result.sessionId);
       expect(session).not.toBeNull();
@@ -80,12 +104,12 @@ describe("RedisSessionStore", () => {
 
     it("adds sessionId to user sessions set", async () => {
       const result = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(result.sessionId);
+      trackSession(result.sessionId);
 
-      const sessionIds = await sessionStore.getUserSessionIds(testUserId);
+      const sessionIds = await sessionStore.getUserSessionIds(mainUserId);
       expect(sessionIds).toContain(result.sessionId);
     });
   });
@@ -98,25 +122,25 @@ describe("RedisSessionStore", () => {
 
     it("returns session data for existing session", async () => {
       const { sessionId } = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(sessionId);
+      trackSession(sessionId);
 
       const session = await sessionStore.get(sessionId);
       expect(session).not.toBeNull();
       expect(session!.id).toBe(sessionId);
-      expect(session!.userId).toBe(testUserId);
+      expect(session!.userId).toBe(mainUserId);
     });
   });
 
   describe("rotateRefreshToken()", () => {
     it("returns new refresh token and rotates the old one", async () => {
       const { sessionId, refreshToken } = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(sessionId);
+      trackSession(sessionId);
 
       const result = await sessionStore.rotateRefreshToken(sessionId, refreshToken);
 
@@ -130,16 +154,19 @@ describe("RedisSessionStore", () => {
     });
 
     it("returns null for non-existent session", async () => {
-      const result = await sessionStore.rotateRefreshToken("00000000-0000-0000-0000-000000000000", "a".repeat(64));
+      const result = await sessionStore.rotateRefreshToken(
+        "00000000-0000-0000-0000-000000000000",
+        "a".repeat(64),
+      );
       expect(result).toBeNull();
     });
 
     it("returns null and revokes all sessions for wrong refresh token", async () => {
       const { sessionId } = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(sessionId);
+      trackSession(sessionId);
 
       const result = await sessionStore.rotateRefreshToken(sessionId, "a".repeat(64));
       expect(result).toBeNull();
@@ -150,10 +177,10 @@ describe("RedisSessionStore", () => {
 
     it("returns null for revoked session", async () => {
       const { sessionId, refreshToken } = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(sessionId);
+      trackSession(sessionId);
 
       await sessionStore.revoke(sessionId);
 
@@ -165,10 +192,10 @@ describe("RedisSessionStore", () => {
   describe("revoke()", () => {
     it("revokes session so get() returns null", async () => {
       const { sessionId } = await sessionStore.create({
-        userId: testUserId,
+        userId: mainUserId,
         userType: "CLIENT",
       });
-      createdSessionIds.push(sessionId);
+      trackSession(sessionId);
 
       await sessionStore.revoke(sessionId);
 
@@ -179,83 +206,80 @@ describe("RedisSessionStore", () => {
 
   describe("revokeAll()", () => {
     it("revokes all sessions for the user and clears session set", async () => {
-      const s1 = await sessionStore.create({ userId: testUserId, userType: "CLIENT" });
-      createdSessionIds.push(s1.sessionId);
-      const s2 = await sessionStore.create({ userId: testUserId, userType: "CLIENT" });
-      createdSessionIds.push(s2.sessionId);
-      const s3 = await sessionStore.create({ userId: testUserId, userType: "CLIENT" });
-      createdSessionIds.push(s3.sessionId);
+      const s1 = await sessionStore.create({ userId: mainUserId, userType: "CLIENT" });
+      trackSession(s1.sessionId);
+      const s2 = await sessionStore.create({ userId: mainUserId, userType: "CLIENT" });
+      trackSession(s2.sessionId);
+      const s3 = await sessionStore.create({ userId: mainUserId, userType: "CLIENT" });
+      trackSession(s3.sessionId);
 
-      await sessionStore.revokeAll(testUserId);
+      await sessionStore.revokeAll(mainUserId);
 
-      const s1data = await sessionStore.get(s1.sessionId);
-      const s2data = await sessionStore.get(s2.sessionId);
-      const s3data = await sessionStore.get(s3.sessionId);
-      expect(s1data).toBeNull();
-      expect(s2data).toBeNull();
-      expect(s3data).toBeNull();
+      expect(await sessionStore.get(s1.sessionId)).toBeNull();
+      expect(await sessionStore.get(s2.sessionId)).toBeNull();
+      expect(await sessionStore.get(s3.sessionId)).toBeNull();
 
-      const sessionIds = await sessionStore.getUserSessionIds(testUserId);
+      const sessionIds = await sessionStore.getUserSessionIds(mainUserId);
       expect(sessionIds).toHaveLength(0);
     });
   });
 
   describe("count()", () => {
     it("returns 0 when user has no sessions", async () => {
-      const uniqueEmail = `${TEST_PREFIX}-nocount@test.com`;
+      const email = `${TEST_PREFIX}-nocount@test.com`;
       const [user] = await db
         .insert(users)
         .values({
           fullName: "Count Test",
-          email: uniqueEmail,
+          email,
+          cpf: TEST_CPF,
           password: "hash",
           role: "CLIENT",
         })
         .returning({ id: users.id });
+      trackUser(user.id, email);
 
       const count = await sessionStore.count(user.id);
       expect(count).toBe(0);
-
-      await db.delete(users).where(eq(users.id, user.id));
     });
 
     it("returns correct count after creating sessions", async () => {
-      const c1 = await sessionStore.create({ userId: testUserId, userType: "CLIENT" });
-      createdSessionIds.push(c1.sessionId);
-      const c2 = await sessionStore.create({ userId: testUserId, userType: "CLIENT" });
-      createdSessionIds.push(c2.sessionId);
+      const c1 = await sessionStore.create({ userId: mainUserId, userType: "CLIENT" });
+      trackSession(c1.sessionId);
+      const c2 = await sessionStore.create({ userId: mainUserId, userType: "CLIENT" });
+      trackSession(c2.sessionId);
 
-      const count = await sessionStore.count(testUserId);
+      const count = await sessionStore.count(mainUserId);
       expect(count).toBeGreaterThanOrEqual(2);
     });
   });
 
   describe("getUserSessionIds()", () => {
     it("returns empty array for user with no sessions", async () => {
-      const uniqueEmail = `${TEST_PREFIX}-no-sessions@test.com`;
+      const email = `${TEST_PREFIX}-nosessions@test.com`;
       const [user] = await db
         .insert(users)
         .values({
           fullName: "No Sessions",
-          email: uniqueEmail,
+          email,
+          cpf: TEST_CPF,
           password: "hash",
           role: "CLIENT",
         })
         .returning({ id: users.id });
+      trackUser(user.id, email);
 
       const ids = await sessionStore.getUserSessionIds(user.id);
       expect(ids).toEqual([]);
-
-      await db.delete(users).where(eq(users.id, user.id));
     });
 
     it("returns all session IDs for the user", async () => {
-      const s1 = await sessionStore.create({ userId: testUserId, userType: "CLIENT" });
-      createdSessionIds.push(s1.sessionId);
-      const s2 = await sessionStore.create({ userId: testUserId, userType: "CLIENT" });
-      createdSessionIds.push(s2.sessionId);
+      const s1 = await sessionStore.create({ userId: mainUserId, userType: "CLIENT" });
+      trackSession(s1.sessionId);
+      const s2 = await sessionStore.create({ userId: mainUserId, userType: "CLIENT" });
+      trackSession(s2.sessionId);
 
-      const ids = await sessionStore.getUserSessionIds(testUserId);
+      const ids = await sessionStore.getUserSessionIds(mainUserId);
       expect(ids).toContain(s1.sessionId);
       expect(ids).toContain(s2.sessionId);
     });
@@ -263,22 +287,22 @@ describe("RedisSessionStore", () => {
 
   describe("revokeAll() edge cases", () => {
     it("does nothing when user has no sessions", async () => {
-      const uniqueEmail = `${TEST_PREFIX}-no-revoke@test.com`;
+      const email = `${TEST_PREFIX}-norevoke@test.com`;
       const [user] = await db
         .insert(users)
         .values({
           fullName: "No Revoke Test",
-          email: uniqueEmail,
+          email,
+          cpf: TEST_CPF,
           password: "hash",
           role: "CLIENT",
         })
         .returning({ id: users.id });
+      trackUser(user.id, email);
 
       await sessionStore.revokeAll(user.id);
       const ids = await sessionStore.getUserSessionIds(user.id);
       expect(ids).toEqual([]);
-
-      await db.delete(users).where(eq(users.id, user.id));
     });
   });
 });

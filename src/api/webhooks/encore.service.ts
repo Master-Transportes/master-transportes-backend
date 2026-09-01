@@ -1,3 +1,3 @@
 import { Service } from "encore.dev/service";
 
-export default new Service("wallet");
+export default new Service("webhooks");

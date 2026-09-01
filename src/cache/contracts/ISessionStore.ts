@@ -15,5 +15,6 @@ export interface ISessionStore {
   revokeAll(userId: string): Promise<void>;
   updateLastSeenAt(sessionId: string): Promise<void>;
   getUserSessionIds(userId: string): Promise<string[]>;
+  findAllActiveByUserId(userId: string): Promise<SessionRow[]>;
   count(userId: string): Promise<number>;
 }

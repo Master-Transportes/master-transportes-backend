@@ -3,6 +3,8 @@ import type { Role, UserStatus } from "./shared.types.ts";
 export interface RegisterUserDTO {
   fullName: string;
   email: string;
+  cpf?: string;
+  cnpj?: string;
   password: string;
   confirmPassword: string;
 }
@@ -10,6 +12,8 @@ export interface RegisterUserDTO {
 export interface RegisterDriverDTO {
   fullName: string;
   email: string;
+  cpf?: string;
+  cnpj?: string;
   password: string;
   confirmPassword: string;
 }

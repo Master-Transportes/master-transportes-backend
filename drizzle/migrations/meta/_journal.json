@@ -8,6 +8,34 @@
       "when": 1788219301402,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788222736657,
+      "tag": "0001_add-wallet-transactions-payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788224130543,
+      "tag": "0002_add-cpf-cnpj-to-users",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788229867566,
+      "tag": "0003_make-cpf-cnpj-required",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788237159520,
+      "tag": "0004_slow_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

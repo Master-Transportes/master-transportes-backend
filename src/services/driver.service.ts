@@ -67,6 +67,8 @@ export class DriverService {
       const driver = await this.driverRepo.create({
         fullName: validated.fullName,
         email: validated.email.toLowerCase(),
+        cpf: validated.cpf,
+        cnpj: validated.cnpj,
         password: hashedPassword,
       });
 
@@ -155,10 +157,7 @@ export class DriverService {
       throw APIError.permissionDenied("Motorista não está aprovado.");
     }
 
-    const newRefreshToken = await this.sessionStore.rotateRefreshToken(
-      session.id,
-      validated.refreshToken,
-    );
+    const newRefreshToken = await this.sessionStore.rotateRefreshToken(session.id, validated.refreshToken);
     if (!newRefreshToken) {
       throw APIError.unauthenticated("Falha ao rotacionar token.");
     }

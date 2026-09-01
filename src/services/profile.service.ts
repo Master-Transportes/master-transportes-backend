@@ -76,10 +76,7 @@ export class ProfileService {
     const hashedPassword = await hash(validated.newPassword, 10);
     await this.userRepo.updatePassword(userID, hashedPassword);
 
-    await Promise.all([
-      this.userCacheService.invalidate(userID),
-      this.sessionStore_.revokeAll(userID),
-    ]);
+    await Promise.all([this.userCacheService.invalidate(userID), this.sessionStore_.revokeAll(userID)]);
   }
 }
 

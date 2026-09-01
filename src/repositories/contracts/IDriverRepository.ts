@@ -3,6 +3,8 @@ import type { DriverStatus } from "@/infra/database/schema";
 export interface CreateDriverData {
   fullName: string;
   email: string;
+  cpf?: string;
+  cnpj?: string;
   password: string;
 }
 

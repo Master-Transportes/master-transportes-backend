@@ -7,7 +7,12 @@ declare global {
   var db: ReturnType<typeof drizzle<typeof schema>> | undefined;
 }
 
-const queryClient = postgres(process.env.DATABASE_URL as string);
+const queryClient = postgres(process.env.DATABASE_URL as string, {
+  max: 20,
+  idle_timeout: 5000,
+  connect_timeout: 10,
+  fetch_types: false,
+});
 export const db = globalThis.db ?? drizzle({ client: queryClient, schema });
 
 if (process.env.NODE_ENV !== "production") {

@@ -10,7 +10,10 @@ import {
   uniqueIndex,
   boolean,
   date,
+  jsonb,
 } from "drizzle-orm/pg-core";
+import type { WalletTransactionType, WalletTransactionDirection, WalletTransactionStatus, PaymentStatus } from "./types";
+export type { WalletTransactionType, WalletTransactionDirection, WalletTransactionStatus, PaymentStatus } from "./types";
 
 export const ROLES = ["CLIENT", "ADMIN", "EMPLOYEE"] as const;
 export type Role = (typeof ROLES)[number];
@@ -33,6 +36,8 @@ export const users = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     fullName: varchar("full_name", { length: 120 }).notNull(),
     email: varchar("email", { length: 255 }).notNull().unique(),
+    cpf: varchar("cpf", { length: 11 }),
+    cnpj: varchar("cnpj", { length: 14 }),
     password: varchar("password").notNull(),
     role: varchar("role", { length: 20 }).$type<Role>().notNull().default("CLIENT"),
     status: varchar("status", { length: 20 }).$type<UserStatus>().notNull().default("ACTIVE"),
@@ -56,6 +61,8 @@ export const drivers = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     fullName: varchar("full_name", { length: 120 }).notNull(),
     email: varchar("email", { length: 255 }).notNull().unique(),
+    cpf: varchar("cpf", { length: 11 }),
+    cnpj: varchar("cnpj", { length: 14 }),
     password: varchar("password").notNull(),
     status: varchar("status", { length: 20 }).$type<DriverStatus>().notNull().default("PENDING"),
     rejectionReason: varchar("rejection_reason", { length: 255 }),
@@ -232,5 +239,79 @@ export const wallets = pgTable(
     index("wallets_status_idx").on(table.status),
     sql`CONSTRAINT wallets_status_check CHECK (${table.status} IN ('ACTIVE', 'SUSPENDED', 'CLOSED'))`,
     sql`CONSTRAINT wallets_balance_check CHECK (${table.balance} >= 0)`,
+  ],
+);
+
+export const walletTransactions = pgTable(
+  "wallet_transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    walletId: uuid("wallet_id")
+      .notNull()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    rideId: uuid("ride_id").references(() => rides.id, { onDelete: "set null" }),
+    type: varchar("type", { length: 30 }).$type<WalletTransactionType>().notNull(),
+    direction: varchar("direction", { length: 6 }).$type<WalletTransactionDirection>().notNull(),
+    amount: integer("amount").notNull(),
+    status: varchar("status", { length: 20 }).$type<WalletTransactionStatus>().notNull(),
+    reference: varchar("reference", { length: 255 }),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  table => [
+    index("wallet_transactions_wallet_id_idx").on(table.walletId),
+    index("wallet_transactions_ride_id_idx").on(table.rideId),
+    index("wallet_transactions_type_idx").on(table.type),
+    index("wallet_transactions_status_idx").on(table.status),
+    index("wallet_transactions_created_at_idx").on(table.createdAt),
+    sql`CONSTRAINT wallet_transactions_type_check CHECK (${table.type} IN ('DEPOSIT', 'RIDE_EARNING', 'PAYOUT', 'ADJUSTMENT', 'REFUND'))`,
+    sql`CONSTRAINT wallet_transactions_direction_check CHECK (${table.direction} IN ('CREDIT', 'DEBIT'))`,
+    sql`CONSTRAINT wallet_transactions_status_check CHECK (${table.status} IN ('PENDING', 'COMPLETED', 'FAILED', 'REVERSED'))`,
+  ],
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    walletId: uuid("wallet_id")
+      .notNull()
+      .references(() => wallets.id, { onDelete: "cascade" }),
+    customerId: uuid("customer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("BRL"),
+    provider: varchar("provider", { length: 30 }).notNull().default("ASAAS"),
+    providerPaymentId: varchar("provider_payment_id", { length: 255 }),
+    status: varchar("status", { length: 20 }).$type<PaymentStatus>().notNull().default("PENDING"),
+    description: varchar("description", { length: 500 }),
+    paidAt: timestamp("paid_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  table => [
+    index("payments_wallet_id_idx").on(table.walletId),
+    index("payments_customer_id_idx").on(table.customerId),
+    index("payments_provider_payment_id_idx").on(table.providerPaymentId),
+    uniqueIndex("payments_provider_unique").on(table.providerPaymentId).where(sql`${table.providerPaymentId} IS NOT NULL`),
+    sql`CONSTRAINT payments_status_check CHECK (${table.status} IN ('PENDING', 'CONFIRMED', 'RECEIVED', 'CANCELLED', 'REFUNDED'))`,
+  ],
+);
+
+export const paymentWebhookEvents = pgTable(
+  "payment_webhook_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    provider: varchar("provider", { length: 30 }).notNull(),
+    externalEventId: varchar("external_event_id", { length: 255 }).notNull(),
+    eventType: varchar("event_type", { length: 50 }).notNull(),
+    payload: jsonb("payload").notNull(),
+    processedAt: timestamp("processed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  table => [
+    sql`CONSTRAINT webhook_event_unique UNIQUE ("provider", "external_event_id")`,
   ],
 );

@@ -1,3 +1,5 @@
+import type { WalletTransactionType, WalletTransactionDirection, WalletTransactionStatus } from "@/infra/database/types";
+
 export interface WalletResponse {
   id: string;
   balance: number;
@@ -7,4 +9,29 @@ export interface WalletResponse {
 export interface WalletBalanceResponse {
   balance: number;
   currency: string;
+}
+
+export interface WalletDepositResponse {
+  paymentId: string;
+  qrCodeBase64: string;
+  pixPayload: string;
+  expirationDate: string;
+  amountInCents: number;
+}
+
+export interface WalletTransactionItem {
+  id: string;
+  type: WalletTransactionType;
+  direction: WalletTransactionDirection;
+  amount: number;
+  status: WalletTransactionStatus;
+  reference: string | null;
+  createdAt: Date;
+}
+
+export interface WalletTransactionListResponse {
+  transactions: WalletTransactionItem[];
+  total: number;
+  page: number;
+  limit: number;
 }

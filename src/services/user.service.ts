@@ -36,7 +36,6 @@ import { rideRequestStore } from "@/cache";
 import { driverStatusStore } from "@/cache";
 import { rideEventPublisher } from "@/messaging";
 import { sessionStore } from "@/cache";
-import { sessionRepository } from "@/repositories";
 import { userCache } from "@/cache";
 import { profileService } from "@/services/profile.service";
 import { randomUUID } from "crypto";
@@ -64,6 +63,8 @@ export class UserService {
       return await this.userRepo.create({
         fullName: validated.fullName,
         email: validated.email.toLowerCase(),
+        cpf: validated.cpf,
+        cnpj: validated.cnpj,
         password: hashedPassword,
         role: "CLIENT",
       });
@@ -130,7 +131,7 @@ export class UserService {
   }
 
   async revokeSession(userId: string, sessionId: string): Promise<void> {
-    const session = await sessionRepository.findById(sessionId);
+    const session = await this.sessionStore.get(sessionId);
     if (!session || session.userId !== userId) {
       throw APIError.notFound("Sessão não encontrada.");
     }
@@ -149,14 +150,6 @@ export class UserService {
       throw APIError.unauthenticated("Sessão revogada.");
     }
 
-    const newRefreshToken = await this.sessionStore.rotateRefreshToken(
-      session.id,
-      validated.refreshToken,
-    );
-    if (!newRefreshToken) {
-      throw APIError.unauthenticated("Falha ao rotacionar token.");
-    }
-
     const user = await this.userRepo.findById(session.userId);
     if (!user) {
       throw APIError.notFound("Usuário não encontrado.");
@@ -165,13 +158,18 @@ export class UserService {
       throw APIError.permissionDenied("Usuário inativo.");
     }
 
+    const newRefreshToken = await this.sessionStore.rotateRefreshToken(session.id, validated.refreshToken);
+    if (!newRefreshToken) {
+      throw APIError.unauthenticated("Falha ao rotacionar token.");
+    }
+
     const accessToken = generateToken({ sub: session.userId, sid: session.id, role: "CLIENT" });
 
     return { accessToken, refreshToken: newRefreshToken, expiresIn: JWT_EXPIRES_IN };
   }
 
   async getUserSessions(userId: string) {
-    const sessions = await sessionRepository.findAllActiveByUserId(userId);
+    const sessions = await this.sessionStore.findAllActiveByUserId(userId);
     return sessions.map(s => ({
       id: s.id,
       deviceId: s.deviceId,

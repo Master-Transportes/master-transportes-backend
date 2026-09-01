@@ -9,20 +9,24 @@ import type {
   UpdateUserData,
 } from "./contracts/IUserRepository";
 
+const USER_COLUMNS = {
+  id: users.id,
+  fullName: users.fullName,
+  email: users.email,
+  cpf: users.cpf,
+  cnpj: users.cnpj,
+  role: users.role,
+  status: users.status,
+  banReason: users.banReason,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+  deletedAt: users.deletedAt,
+} as const;
+
 export class UserRepository implements IUserRepository {
   async findById(id: string): Promise<UserRow | null> {
     const [user] = await db
-      .select({
-        id: users.id,
-        fullName: users.fullName,
-        email: users.email,
-        role: users.role,
-        status: users.status,
-        banReason: users.banReason,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-        deletedAt: users.deletedAt,
-      })
+      .select(USER_COLUMNS)
       .from(users)
       .where(and(eq(users.id, id), isNull(users.deletedAt)));
     return user ?? null;
@@ -55,17 +59,7 @@ export class UserRepository implements IUserRepository {
   }
 
   async update(id: string, data: UpdateUserData): Promise<UserRow | null> {
-    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning({
-      id: users.id,
-      fullName: users.fullName,
-      email: users.email,
-      role: users.role,
-      status: users.status,
-      banReason: users.banReason,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-      deletedAt: users.deletedAt,
-    });
+    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning(USER_COLUMNS);
     return user ?? null;
   }
 

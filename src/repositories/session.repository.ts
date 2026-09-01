@@ -34,11 +34,7 @@ export class SessionRepository implements ISessionRepository {
   }
 
   async findByRefreshTokenHash(hash: string): Promise<SessionRow | null> {
-    const [row] = await db
-      .select(SESSION_COLUMNS)
-      .from(sessions)
-      .where(and(eq(sessions.refreshTokenHash, hash), isNull(sessions.revokedAt)))
-      .limit(1);
+    const [row] = await db.select(SESSION_COLUMNS).from(sessions).where(eq(sessions.refreshTokenHash, hash)).limit(1);
     return row ?? null;
   }
 
@@ -46,11 +42,7 @@ export class SessionRepository implements ISessionRepository {
     const [row] = await db
       .select(SESSION_COLUMNS)
       .from(sessions)
-      .where(and(
-        eq(sessions.userId, userId),
-        eq(sessions.deviceId, deviceId),
-        isNull(sessions.revokedAt),
-      ))
+      .where(and(eq(sessions.userId, userId), eq(sessions.deviceId, deviceId), isNull(sessions.revokedAt)))
       .limit(1);
     return row ?? null;
   }
@@ -59,10 +51,7 @@ export class SessionRepository implements ISessionRepository {
     return db
       .select(SESSION_COLUMNS)
       .from(sessions)
-      .where(and(
-        eq(sessions.userId, userId),
-        isNull(sessions.revokedAt),
-      ));
+      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
   }
 
   async findActiveByUserId(userId: string): Promise<SessionRow | null> {
@@ -74,18 +63,17 @@ export class SessionRepository implements ISessionRepository {
     return row ?? null;
   }
 
-  async rotateRefreshToken(id: string, newRefreshTokenHash: string): Promise<void> {
-    await db
+  async rotateRefreshToken(id: string, oldRefreshTokenHash: string, newRefreshTokenHash: string): Promise<boolean> {
+    const result = await db
       .update(sessions)
       .set({ refreshTokenHash: newRefreshTokenHash, lastSeenAt: new Date() })
-      .where(eq(sessions.id, id));
+      .where(and(eq(sessions.id, id), eq(sessions.refreshTokenHash, oldRefreshTokenHash), isNull(sessions.revokedAt)))
+      .returning({ id: sessions.id });
+    return result.length > 0;
   }
 
   async revoke(id: string): Promise<void> {
-    await db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(eq(sessions.id, id));
+    await db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, id));
   }
 
   async revokeAllByUserId(userId: string): Promise<void> {
@@ -96,10 +84,7 @@ export class SessionRepository implements ISessionRepository {
   }
 
   async updateLastSeenAt(id: string): Promise<void> {
-    await db
-      .update(sessions)
-      .set({ lastSeenAt: new Date() })
-      .where(eq(sessions.id, id));
+    await db.update(sessions).set({ lastSeenAt: new Date() }).where(eq(sessions.id, id));
   }
 }
 

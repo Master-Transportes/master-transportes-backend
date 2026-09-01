@@ -2,7 +2,13 @@ import { eq, desc, inArray, sql, and, ilike, isNull } from "drizzle-orm";
 import { users } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
 import { SYSTEM_ROLES } from "@/constants/system";
-import type { IUserAdminRepository, ListUsersData, ListSystemUsersData, AdminUserListResult, AdminActionResult } from "./contracts/IUserAdminRepository";
+import type {
+  IUserAdminRepository,
+  ListUsersData,
+  ListSystemUsersData,
+  AdminUserListResult,
+  AdminActionResult,
+} from "./contracts/IUserAdminRepository";
 
 const LIST_COLUMNS = {
   id: users.id,

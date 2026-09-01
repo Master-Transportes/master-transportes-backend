@@ -18,7 +18,16 @@ import type { IUserCache } from "@/cache/contracts/IUserCache";
 import { userAdminRepository } from "@/repositories";
 import { userCache } from "@/cache";
 
-function toDashboardUserItem(row: { id: string; fullName: string; email: string; role: string; status: string; banReason: string | null; createdAt: Date; updatedAt: Date }): DashboardUserItem {
+function toDashboardUserItem(row: {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  status: string;
+  banReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): DashboardUserItem {
   return {
     id: row.id,
     fullName: row.fullName,
@@ -31,7 +40,22 @@ function toDashboardUserItem(row: { id: string; fullName: string; email: string;
   };
 }
 
-function toPaginatedResponse(result: { users: { id: string; fullName: string; email: string; role: string; status: string; banReason: string | null; createdAt: Date; updatedAt: Date }[]; total: number; page: number; limit: number; totalPages: number }): PaginatedUsersResponse {
+function toPaginatedResponse(result: {
+  users: {
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+    status: string;
+    banReason: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}): PaginatedUsersResponse {
   return {
     users: result.users.map(toDashboardUserItem),
     total: result.total,

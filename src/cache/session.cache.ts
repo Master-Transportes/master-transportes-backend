@@ -79,7 +79,11 @@ export class SessionStore implements ISessionStore {
     if (!session) return null;
 
     const oldHash = hashRefreshToken(oldRefreshToken);
-    if (session.refreshTokenHash !== oldHash) {
+    const newRefreshToken = generateRefreshToken();
+    const newHash = hashRefreshToken(newRefreshToken);
+
+    const rotated = await this.sessionRepo.rotateRefreshToken(sessionId, oldHash, newHash);
+    if (!rotated) {
       await this.sessionRepo.revokeAllByUserId(session.userId);
       const oldSessionIds = await redis.smembers(CACHE_KEYS.USER_SESSIONS(session.userId));
       if (oldSessionIds.length > 0) {
@@ -91,11 +95,6 @@ export class SessionStore implements ISessionStore {
       return null;
     }
 
-    const newRefreshToken = generateRefreshToken();
-    const newHash = hashRefreshToken(newRefreshToken);
-
-    await this.sessionRepo.rotateRefreshToken(sessionId, newHash);
-
     const updatedSession = { ...session, refreshTokenHash: newHash };
     await redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(updatedSession), "EX", SESSION_CACHE_TTL_SECONDS);
 
@@ -103,10 +102,11 @@ export class SessionStore implements ISessionStore {
   }
 
   async revoke(sessionId: string): Promise<void> {
+    const session = await this.sessionRepo.findById(sessionId);
+
     await this.sessionRepo.revoke(sessionId);
     await redis.del(CACHE_KEYS.SESSION(sessionId));
 
-    const session = await this.sessionRepo.findById(sessionId);
     if (session) {
       const remaining = await redis.srem(CACHE_KEYS.USER_SESSIONS(session.userId), sessionId);
       if (remaining === 0) {
@@ -135,11 +135,11 @@ export class SessionStore implements ISessionStore {
     return redis.smembers(CACHE_KEYS.USER_SESSIONS(userId));
   }
 
+  async findAllActiveByUserId(userId: string): Promise<SessionRow[]> {
+    return this.sessionRepo.findAllActiveByUserId(userId);
+  }
+
   async count(userId: string): Promise<number> {
     return redis.scard(CACHE_KEYS.USER_SESSIONS(userId));
   }
-}
-
-export function createSessionStore(sessionRepo: ISessionRepository): SessionStore {
-  return new SessionStore(sessionRepo);
 }

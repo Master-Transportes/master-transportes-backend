@@ -117,7 +117,11 @@ export class RideRepository implements IRideRepository {
     return row ? toRideDetailedRow(row) : null;
   }
 
-  async findActiveByIdAndClient(rideId: string, clientId: string, statuses: RideStatus[]): Promise<RideActiveRow | null> {
+  async findActiveByIdAndClient(
+    rideId: string,
+    clientId: string,
+    statuses: RideStatus[],
+  ): Promise<RideActiveRow | null> {
     const [row] = await db
       .select({
         id: rides.id,
@@ -145,7 +149,11 @@ export class RideRepository implements IRideRepository {
     return row ?? null;
   }
 
-  async findActiveByIdAndDriver(rideId: string, driverId: string, statuses: RideStatus[]): Promise<RideDetailedRow | null> {
+  async findActiveByIdAndDriver(
+    rideId: string,
+    driverId: string,
+    statuses: RideStatus[],
+  ): Promise<RideDetailedRow | null> {
     const [row] = await db
       .select(RIDE_SELECT_COLUMNS)
       .from(rides)

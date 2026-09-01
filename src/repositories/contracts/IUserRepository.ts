@@ -3,6 +3,8 @@ import type { Role, UserStatus } from "@/infra/database/schema";
 export interface CreateUserData {
   fullName: string;
   email: string;
+  cpf?: string;
+  cnpj?: string;
   password: string;
   role: Role;
 }
@@ -10,6 +12,8 @@ export interface CreateUserData {
 export interface UpdateUserData {
   fullName?: string;
   email?: string;
+  cpf?: string;
+  cnpj?: string;
   updatedAt: Date;
 }
 
@@ -17,6 +21,8 @@ export interface UserRow {
   id: string;
   fullName: string;
   email: string;
+  cpf: string | null;
+  cnpj: string | null;
   role: Role;
   status: UserStatus;
   banReason: string | null;
