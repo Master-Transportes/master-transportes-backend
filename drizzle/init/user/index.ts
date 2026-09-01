@@ -5,13 +5,13 @@ import { users, drivers } from "@/infra/database/schema";
 
 // ---------- DADOS DE EXEMPLO ----------
 const userSeedData = [
-  { fullName: "Enderson User da Silva", email: "user@admin.com", role: "CLIENT" as const },
-  { fullName: "Enderson Admin da Silva", email: "admin@admin.com", role: "ADMIN" as const },
+  { fullName: "Enderson User da Silva", email: "user@admin.com", cpf: "52998224725", role: "CLIENT" as const },
+  { fullName: "Enderson Admin da Silva", email: "admin@admin.com", cpf: "12345678909", role: "ADMIN" as const },
 ];
 
 const driverSeedData = [
-  { fullName: "Enderson Driver da Silva", email: "driver@admin.com" },
-  { fullName: "Enderson Driver1 da Silva", email: "driver2@admin.com" },
+  { fullName: "Enderson Driver da Silva", email: "driver@admin.com", cpf: "48326754005" },
+  { fullName: "Enderson Driver1 da Silva", email: "driver2@admin.com", cpf: "71406852317" },
 ];
 
 // ---------- FUNÇÃO PRINCIPAL ----------
@@ -30,6 +30,7 @@ async function seed(): Promise<void> {
       await db.insert(users).values({
         fullName: user.fullName,
         email: user.email,
+        cpf: user.cpf,
         password: userPassword,
         role: user.role,
         status: "ACTIVE",
@@ -52,6 +53,7 @@ async function seed(): Promise<void> {
       await db.insert(drivers).values({
         fullName: driver.fullName,
         email: driver.email,
+        cpf: driver.cpf,
         password: driverPassword,
         status: "APPROVED", // ou "PENDING", como preferir
       });

@@ -12,6 +12,7 @@ import { walletService } from "./wallet.service";
 import { db } from "@/infra/database/drizzle";
 import { paymentWebhookEvents } from "@/infra/database/schema";
 import { ASAAS_WEBHOOK_EVENTS } from "@/constants/wallet";
+import { isValidCpf, isValidCnpj } from "@/utils/document";
 
 export class PaymentService {
   constructor(
@@ -34,9 +35,14 @@ export class PaymentService {
     let asaasCustomer = await asaas.findCustomerByExternalReference(userId);
 
     if (!asaasCustomer) {
+      const cpfCnpj = user.cpf ?? user.cnpj ?? "";
+      if (cpfCnpj && !isValidCpf(cpfCnpj) && !isValidCnpj(cpfCnpj)) {
+        throw APIError.failedPrecondition("CPF/CNPJ do usuário é inválido.");
+      }
+
       asaasCustomer = await asaas.createCustomer({
         name: user.fullName,
-        cpfCnpj: user.cpf ?? user.cnpj ?? "",
+        cpfCnpj,
         email: user.email,
         externalReference: userId,
       });

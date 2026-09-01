@@ -12,8 +12,18 @@ import {
   date,
   jsonb,
 } from "drizzle-orm/pg-core";
-import type { WalletTransactionType, WalletTransactionDirection, WalletTransactionStatus, PaymentStatus } from "./types";
-export type { WalletTransactionType, WalletTransactionDirection, WalletTransactionStatus, PaymentStatus } from "./types";
+import type {
+  WalletTransactionType,
+  WalletTransactionDirection,
+  WalletTransactionStatus,
+  PaymentStatus,
+} from "./types";
+export type {
+  WalletTransactionType,
+  WalletTransactionDirection,
+  WalletTransactionStatus,
+  PaymentStatus,
+} from "./types";
 
 export const ROLES = ["CLIENT", "ADMIN", "EMPLOYEE"] as const;
 export type Role = (typeof ROLES)[number];
@@ -295,7 +305,9 @@ export const payments = pgTable(
     index("payments_wallet_id_idx").on(table.walletId),
     index("payments_customer_id_idx").on(table.customerId),
     index("payments_provider_payment_id_idx").on(table.providerPaymentId),
-    uniqueIndex("payments_provider_unique").on(table.providerPaymentId).where(sql`${table.providerPaymentId} IS NOT NULL`),
+    uniqueIndex("payments_provider_unique")
+      .on(table.providerPaymentId)
+      .where(sql`${table.providerPaymentId} IS NOT NULL`),
     sql`CONSTRAINT payments_status_check CHECK (${table.status} IN ('PENDING', 'CONFIRMED', 'RECEIVED', 'CANCELLED', 'REFUNDED'))`,
   ],
 );
@@ -311,7 +323,5 @@ export const paymentWebhookEvents = pgTable(
     processedAt: timestamp("processed_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  table => [
-    sql`CONSTRAINT webhook_event_unique UNIQUE ("provider", "external_event_id")`,
-  ],
+  table => [sql`CONSTRAINT webhook_event_unique UNIQUE ("provider", "external_event_id")`],
 );

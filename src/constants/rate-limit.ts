@@ -1,12 +1,12 @@
 export const RATE_LIMITS = {
   LOGIN: {
     key: "ratelimit:login",
-    limit: 5,
+    limit: 7,
     windowSeconds: 10 * 60,
   },
   REGISTER: {
     key: "ratelimit:register",
-    limit: 3,
+    limit: 6,
     windowSeconds: 60 * 60,
   },
   REFRESH: {

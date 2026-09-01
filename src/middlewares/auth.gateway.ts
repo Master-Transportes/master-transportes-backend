@@ -1,5 +1,5 @@
 import { verifyToken } from "@/auth/auth";
-import { APIError } from "encore.dev/api";
+import { APIError, Gateway } from "encore.dev/api";
 import { authHandler } from "encore.dev/auth";
 import { Header } from "encore.dev/api";
 import { sessionStore } from "@/cache";
@@ -41,4 +41,8 @@ export const auth = authHandler<AuthParams, AuthData>(async params => {
     sessionID: payload.sid,
     role: payload.role,
   };
+});
+
+export const gateway = new Gateway({
+  authHandler: auth,
 });
