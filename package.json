@@ -6,8 +6,8 @@
   "license": "MPL-2.0",
   "type": "module",
   "scripts": {
-    "dev": "docker compose up -d && npx drizzle-kit migrate && npm run seed && npx encore run",
-    "start": "npx encore run",
+    "dev": "docker compose up -d && npx drizzle-kit migrate && npm run seed && npx encore run -listen=0.0.0.0",
+    "start": "npx encore run -listen=0.0.0.0",
     "seed": "npx tsx drizzle/init/user/index.ts",
     "test": "encore exec -- bun test",
     "lint": "eslint src/",
