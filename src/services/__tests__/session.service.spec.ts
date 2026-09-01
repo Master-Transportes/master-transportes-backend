@@ -36,21 +36,11 @@ describe("RedisSessionStore", () => {
   });
 
   afterAll(async () => {
-    await Promise.all(
-      createdSessionIds.map(id => sessionStore.revoke(id).catch(() => {})),
-    );
+    await Promise.all(createdSessionIds.map(id => sessionStore.revoke(id).catch(() => {})));
 
-    await Promise.all(
-      createdUserIds.flatMap(userId => [
-        redis.del(CACHE_KEYS.USER_SESSIONS(userId)),
-      ]),
-    );
+    await Promise.all(createdUserIds.flatMap(userId => [redis.del(CACHE_KEYS.USER_SESSIONS(userId))]));
 
-    await Promise.all(
-      createdEmails.map(email =>
-        db.delete(users).where(eq(users.email, email)),
-      ),
-    );
+    await Promise.all(createdEmails.map(email => db.delete(users).where(eq(users.email, email))));
   });
 
   afterEach(async () => {
@@ -154,10 +144,7 @@ describe("RedisSessionStore", () => {
     });
 
     it("returns null for non-existent session", async () => {
-      const result = await sessionStore.rotateRefreshToken(
-        "00000000-0000-0000-0000-000000000000",
-        "a".repeat(64),
-      );
+      const result = await sessionStore.rotateRefreshToken("00000000-0000-0000-0000-000000000000", "a".repeat(64));
       expect(result).toBeNull();
     });
 

@@ -48,9 +48,7 @@ export const createRateLimitMiddleware = (options: RateLimitMiddlewareOptions) =
 
     if (current > config.limit) {
       const ttl = await redis.ttl(key);
-      throw APIError.resourceExhausted(
-        `Limite de requisições excedido. Tente novamente em ${ttl} segundos.`,
-      );
+      throw APIError.resourceExhausted(`Limite de requisições excedido. Tente novamente em ${ttl} segundos.`);
     }
 
     return next(req);
@@ -58,15 +56,15 @@ export const createRateLimitMiddleware = (options: RateLimitMiddlewareOptions) =
 
 export const loginRateLimit = createRateLimitMiddleware({
   action: "LOGIN",
-  resolveIdentifier: (meta) => extractIp(meta),
+  resolveIdentifier: meta => extractIp(meta),
 });
 
 export const registerRateLimit = createRateLimitMiddleware({
   action: "REGISTER",
-  resolveIdentifier: (meta) => extractIp(meta),
+  resolveIdentifier: meta => extractIp(meta),
 });
 
 export const refreshRateLimit = createRateLimitMiddleware({
   action: "REFRESH",
-  resolveIdentifier: (meta) => extractIp(meta),
+  resolveIdentifier: meta => extractIp(meta),
 });

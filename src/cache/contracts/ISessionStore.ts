@@ -7,7 +7,9 @@ export interface SessionMetadata {
 }
 
 export interface ISessionStore {
-  create(input: { userId: string; userType: "CLIENT" | "DRIVER" } & SessionMetadata): Promise<{ sessionId: string; refreshToken: string }>;
+  create(
+    input: { userId: string; userType: "CLIENT" | "DRIVER" } & SessionMetadata,
+  ): Promise<{ sessionId: string; refreshToken: string }>;
   get(sessionId: string): Promise<SessionRow | null>;
   findByRefreshToken(refreshToken: string): Promise<SessionRow | null>;
   rotateRefreshToken(sessionId: string, oldRefreshToken: string): Promise<string | null>;

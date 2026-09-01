@@ -1,8 +1,9 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
 import { userService } from "@/services/user.service";
+import type { LogoutResponse, RevokeSessionParams, ListSessionsResponse } from "@/dto/access.interface";
 
-export const logout = api<void, { message: string }>(
+export const logout = api<void, LogoutResponse>(
   { expose: true, method: "POST", path: "/auth/logout", auth: true },
   async () => {
     const { sessionID } = auth.getAuthData()!;
@@ -11,7 +12,7 @@ export const logout = api<void, { message: string }>(
   },
 );
 
-export const logoutAll = api<void, { message: string }>(
+export const logoutAll = api<void, LogoutResponse>(
   { expose: true, method: "POST", path: "/auth/logout-all", auth: true },
   async () => {
     const { userID } = auth.getAuthData()!;
@@ -20,7 +21,7 @@ export const logoutAll = api<void, { message: string }>(
   },
 );
 
-export const listSessions = api<void, { sessions: Array<{ id: string; deviceId: string | null; userAgent: string | null; ipAddress: string | null; createdAt: Date; lastSeenAt: Date; isCurrent: boolean }> }>(
+export const listSessions = api<void, ListSessionsResponse>(
   { expose: true, method: "GET", path: "/auth/sessions", auth: true },
   async () => {
     const { userID, sessionID } = auth.getAuthData()!;
@@ -30,9 +31,9 @@ export const listSessions = api<void, { sessions: Array<{ id: string; deviceId: 
   },
 );
 
-export const revokeSession = api<{ sessionId: string }, { message: string }>(
+export const revokeSession = api<RevokeSessionParams, LogoutResponse>(
   { expose: true, method: "DELETE", path: "/auth/sessions/:sessionId", auth: true },
-  async (params) => {
+  async params => {
     const { userID } = auth.getAuthData()!;
     await userService.revokeSession(userID, params.sessionId);
     return { message: "Sessão encerrada com sucesso." };

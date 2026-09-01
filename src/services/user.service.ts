@@ -5,11 +5,9 @@ import { validateOrThrow } from "@/validations/schema-validator";
 import { SignInSchema, RefreshSchema } from "@/validations/dto/access.validate";
 import {
   CancelRideSchema,
-  ChangePasswordSchema,
   ListRidesSchema,
   RegisterUserSchema,
   RequestRideSchema,
-  UpdateProfileSchema,
 } from "@/validations/dto/user.validate";
 import type {
   ChangePasswordDTO,

@@ -7,6 +7,9 @@ import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
 import type {
   CancelRideParams,
   ChangePasswordDTO,
+  PaginationParams,
+  CancelRideRequestParams,
+  DepositParams,
   RegisterAccountResponse,
   RegisterUserDTO,
   RequestRideDTO,
@@ -63,7 +66,7 @@ export const updatePassword = api<ChangePasswordDTO, void>(
   },
 );
 
-export const listRides = api<{ page?: string; limit?: string }, RideListResponse>(
+export const listRides = api<PaginationParams, RideListResponse>(
   { expose: true, method: "GET", path: "/client/rides", auth: true },
   async params => {
     const { userID } = auth.getAuthData()!;
@@ -106,7 +109,7 @@ export const cancelRide = api<CancelRideParams, void>(
   },
 );
 
-export const cancelRideRequest = api<{ rideId: string }, void>(
+export const cancelRideRequest = api<CancelRideRequestParams, void>(
   { expose: true, method: "DELETE", path: "/client/rides/:rideId/request", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;
@@ -130,7 +133,7 @@ export const getBalance = api<void, WalletBalanceResponse>(
   },
 );
 
-export const listTransactions = api<{ page?: string; limit?: string }, WalletTransactionListResponse>(
+export const listTransactions = api<PaginationParams, WalletTransactionListResponse>(
   { expose: true, method: "GET", path: "/client/wallet/transactions", auth: true },
   async params => {
     const { userID } = auth.getAuthData()!;
@@ -141,7 +144,7 @@ export const listTransactions = api<{ page?: string; limit?: string }, WalletTra
   },
 );
 
-export const deposit = api<{ amountInCents: number }, WalletDepositResponse>(
+export const deposit = api<DepositParams, WalletDepositResponse>(
   { expose: true, method: "POST", path: "/client/wallet/deposit", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;

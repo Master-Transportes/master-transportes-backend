@@ -1,5 +1,18 @@
 import type { Role, UserStatus } from "./shared.types.ts";
 
+export interface PaginationParams {
+  page?: string;
+  limit?: string;
+}
+
+export interface CancelRideRequestParams {
+  rideId: string;
+}
+
+export interface DepositParams {
+  amountInCents: number;
+}
+
 export interface RegisterUserDTO {
   fullName: string;
   email: string;

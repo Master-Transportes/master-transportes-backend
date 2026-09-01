@@ -1,10 +1,4 @@
-import type {
-  AsaasCustomer,
-  AsaasPayment,
-  AsaasPixQrCode,
-  AsaasPaymentStatus,
-  AsaasError,
-} from "./asaas.types";
+import type { AsaasCustomer, AsaasPayment, AsaasPixQrCode, AsaasPaymentStatus, AsaasError } from "./asaas.types";
 
 const BASE_URL = process.env.ASAAS_BASE_URL ?? "https://api-sandbox.asaas.com/v3";
 const API_KEY = process.env.ASAAS_KEY_SANDBOX ?? "";
@@ -66,9 +60,7 @@ export async function createCustomer(data: {
   return request<AsaasCustomer>({ method: "POST", path: "/customers", body: data });
 }
 
-export async function findCustomerByExternalReference(
-  externalReference: string,
-): Promise<AsaasCustomer | null> {
+export async function findCustomerByExternalReference(externalReference: string): Promise<AsaasCustomer | null> {
   const result = await request<{ data: AsaasCustomer[] }>({
     method: "GET",
     path: `/customers?externalReference=${encodeURIComponent(externalReference)}&limit=1`,

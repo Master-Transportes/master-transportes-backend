@@ -5,6 +5,8 @@ import { walletService } from "@/services/wallet.service";
 import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
 import type {
   ChangePasswordDTO,
+  DepositParams,
+  PaginationParams,
   RegisterAccountResponse,
   RegisterDriverDTO,
   UpdateProfileDTO,
@@ -78,7 +80,7 @@ export const updateLocation = api<UpdateDriverLocationDTO, void>(
   },
 );
 
-export const listRides = api<{ page?: string; limit?: string }, DriverRideListResponse>(
+export const listRides = api<PaginationParams, DriverRideListResponse>(
   { expose: true, method: "GET", path: "/driver/rides", auth: true },
   async params => {
     const { userID } = auth.getAuthData()!;
@@ -169,7 +171,7 @@ export const getBalance = api<void, WalletBalanceResponse>(
   },
 );
 
-export const listTransactions = api<{ page?: string; limit?: string }, WalletTransactionListResponse>(
+export const listTransactions = api<PaginationParams, WalletTransactionListResponse>(
   { expose: true, method: "GET", path: "/driver/wallet/transactions", auth: true },
   async params => {
     const { userID } = auth.getAuthData()!;
@@ -180,7 +182,7 @@ export const listTransactions = api<{ page?: string; limit?: string }, WalletTra
   },
 );
 
-export const requestPayout = api<{ amountInCents: number }, PayoutResponse>(
+export const requestPayout = api<DepositParams, PayoutResponse>(
   { expose: true, method: "POST", path: "/driver/wallet/payout", auth: true },
   async payload => {
     const { userID } = auth.getAuthData()!;

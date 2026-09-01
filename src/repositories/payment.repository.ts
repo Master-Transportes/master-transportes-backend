@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { payments, paymentWebhookEvents, wallets, walletTransactions } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
 import type {

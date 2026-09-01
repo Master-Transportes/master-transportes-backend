@@ -9,7 +9,9 @@ import type { ISessionStore, SessionMetadata } from "./contracts/ISessionStore";
 export class SessionStore implements ISessionStore {
   constructor(private readonly sessionRepo: ISessionRepository) {}
 
-  async create(input: { userId: string; userType: "CLIENT" | "DRIVER" } & SessionMetadata): Promise<{ sessionId: string; refreshToken: string }> {
+  async create(
+    input: { userId: string; userType: "CLIENT" | "DRIVER" } & SessionMetadata,
+  ): Promise<{ sessionId: string; refreshToken: string }> {
     if (input.deviceId) {
       const existingSession = await this.sessionRepo.findActiveByDeviceId(input.userId, input.deviceId);
       if (existingSession) {

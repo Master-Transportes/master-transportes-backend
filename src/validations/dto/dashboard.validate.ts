@@ -5,9 +5,26 @@ export const BanUserSchema = z.object({
 });
 
 const PaginationWithSearch = z.object({
-  page: z.coerce.number().int().min(0).optional().default(1).transform(v => v || 1),
-  limit: z.coerce.number().int().min(0).max(50).optional().default(20).transform(v => v || 10),
-  search: z.string().optional().default("").transform(s => s.trim()),
+  page: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .default(1)
+    .transform(v => v || 1),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(50)
+    .optional()
+    .default(20)
+    .transform(v => v || 10),
+  search: z
+    .string()
+    .optional()
+    .default("")
+    .transform(s => s.trim()),
   status: z.enum(["ACTIVE", "BANNED", "INACTIVE"]).optional(),
 });
 

@@ -13,12 +13,7 @@ export class RedisWalletCache implements IWalletCache {
   }
 
   async setBalance(walletId: string, data: WalletCacheData): Promise<void> {
-    await redis.set(
-      CACHE_KEYS.WALLET_BALANCE(walletId),
-      JSON.stringify(data),
-      "EX",
-      WALLET_BALANCE_CACHE_TTL_SECONDS,
-    );
+    await redis.set(CACHE_KEYS.WALLET_BALANCE(walletId), JSON.stringify(data), "EX", WALLET_BALANCE_CACHE_TTL_SECONDS);
   }
 
   async invalidate(walletId: string): Promise<void> {

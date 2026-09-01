@@ -324,5 +324,5 @@ export const paymentWebhookEvents = pgTable(
     processedAt: timestamp("processed_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  table => [sql`CONSTRAINT webhook_event_unique UNIQUE ("provider", "external_event_id")`],
+  _table => [sql`CONSTRAINT webhook_event_unique UNIQUE ("provider", "external_event_id")`],
 );

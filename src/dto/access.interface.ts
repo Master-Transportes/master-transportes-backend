@@ -27,6 +27,24 @@ export interface LogoutResponse {
   message: string;
 }
 
+export interface RevokeSessionParams {
+  sessionId: string;
+}
+
+export interface SessionItem {
+  id: string;
+  deviceId: string | null;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: Date;
+  lastSeenAt: Date;
+  isCurrent: boolean;
+}
+
+export interface ListSessionsResponse {
+  sessions: SessionItem[];
+}
+
 export interface GetMeResponse {
   id: string;
   fullName: string;

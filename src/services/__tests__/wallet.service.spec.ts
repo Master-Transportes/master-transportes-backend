@@ -2,7 +2,7 @@ import { describe, beforeAll, afterAll, expect, it } from "bun:test";
 import { like, eq } from "drizzle-orm";
 import { hashSync } from "bcrypt";
 import { walletService } from "@/services/wallet.service";
-import { walletRepository, walletTransactionRepository } from "@/repositories";
+import { walletRepository } from "@/repositories";
 import { db } from "@/infra/database/drizzle";
 import { users, wallets, walletTransactions } from "@/infra/database/schema";
 
@@ -185,7 +185,7 @@ describe("WalletService", () => {
 
   describe("requestPayout()", () => {
     it("debits wallet and returns new balance", async () => {
-      const wallet = await walletService.getWallet(testUserId, "USER");
+      await walletService.getWallet(testUserId, "USER");
       const before = await walletService.getBalance(testUserId, "USER");
 
       const result = await walletService.requestPayout(testUserId, "USER", 1500);
