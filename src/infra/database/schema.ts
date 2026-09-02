@@ -28,8 +28,8 @@ export type {
 export const ROLES = ["CLIENT", "ADMIN", "EMPLOYEE"] as const;
 export type Role = (typeof ROLES)[number];
 
-export const USER_STATUSES = ["ACTIVE", "BANNED", "INACTIVE"] as const;
-export type UserStatus = (typeof USER_STATUSES)[number];
+export const CLIENT_STATUSES = ["ACTIVE", "BANNED", "INACTIVE"] as const;
+export type ClientStatus = (typeof CLIENT_STATUSES)[number];
 
 export const DRIVER_STATUSES = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED", "BANNED"] as const;
 export type DriverStatus = (typeof DRIVER_STATUSES)[number];
@@ -50,7 +50,7 @@ export const users = pgTable(
     cnpj: varchar("cnpj", { length: 14 }),
     password: varchar("password").notNull(),
     role: varchar("role", { length: 20 }).$type<Role>().notNull().default("CLIENT"),
-    status: varchar("status", { length: 20 }).$type<UserStatus>().notNull().default("ACTIVE"),
+    status: varchar("status", { length: 20 }).$type<ClientStatus>().notNull().default("ACTIVE"),
     banReason: varchar("ban_reason", { length: 255 }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

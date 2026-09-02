@@ -1,6 +1,15 @@
 import type { DriverStatus } from "./shared.types.ts";
 import type { PixKeyType } from "@/infra/database/types";
 
+export interface RegisterDriverDTO {
+  fullName: string;
+  email: string;
+  cpf?: string;
+  cnpj?: string;
+  password: string;
+  confirmPassword: string;
+}
+
 export interface UpdateDriverLocationDTO {
   latitude: number;
   longitude: number;

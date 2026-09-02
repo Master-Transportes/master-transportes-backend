@@ -1,13 +1,13 @@
 import { DRIVER_LOCATION_TTL_SECONDS, DRIVER_HEARTBEAT_TTL_SECONDS } from "@/constants/cache";
 
 export const CACHE_KEYS = {
-  USER: (userId: string) => `user:${userId}`,
-  USER_BASE: (userId: string) => `user:${userId}:base`,
+  CLIENT: (clientId: string) => `client:${clientId}`,
+  CLIENT_BASE: (clientId: string) => `client:${clientId}:base`,
   DRIVER: (driverId: string) => `driver:${driverId}`,
   DRIVER_BASE: (driverId: string) => `driver:${driverId}:base`,
-  USER_SESSIONS: (userId: string) => `user:${userId}:sessions`,
+  CLIENT_SESSIONS: (clientId: string) => `client:${clientId}:sessions`,
   SESSION: (sessionId: string) => `session:${sessionId}`,
-  ACTIVE_RIDE_REQUEST: (userId: string) => `user:${userId}:ride-request`,
+  ACTIVE_RIDE_REQUEST: (clientId: string) => `client:${clientId}:ride-request`,
   WALLET_BALANCE: (walletId: string) => `wallet:${walletId}:balance`,
 };
 

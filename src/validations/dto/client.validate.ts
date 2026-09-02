@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const RegisterUserSchema = z
+export const RegisterClientSchema = z
   .object({
     fullName: z.string().min(2, "Nome completo é obrigatório."),
     email: z.string().email("E-mail inválido."),

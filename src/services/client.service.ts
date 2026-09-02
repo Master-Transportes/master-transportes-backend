@@ -6,47 +6,47 @@ import { SignInSchema, RefreshSchema } from "@/validations/dto/access.validate";
 import {
   CancelRideSchema,
   ListRidesSchema,
-  RegisterUserSchema,
+  RegisterClientSchema,
   RequestRideSchema,
-} from "@/validations/dto/user.validate";
+} from "@/validations/dto/client.validate";
 import type {
   ChangePasswordDTO,
-  RegisterUserDTO,
+  RegisterClientDTO,
   UpdateProfileDTO,
-  UserProfileResponse,
+  ClientProfileResponse,
   RideSummary,
   RequestRideResponse,
   RequestRideDTO,
   ActiveRideResponse,
   PendingRideRequestResponse,
-} from "@/dto/user.interface";
+} from "@/dto/client.interface";
 import type { SignInDTO, SignInResponse, RefreshResponse, GetMeResponse } from "@/dto/access.interface";
-import type { IUserRepository } from "@/repositories/contracts/IUserRepository";
+import type { IClientRepository } from "@/repositories/contracts/IClientRepository";
 import type { ISessionStore } from "@/cache/contracts/ISessionStore";
-import type { IUserCache } from "@/cache/contracts/IUserCache";
+import type { IClientCache } from "@/cache/contracts/IClientCache";
 import type { IRideRepository } from "@/repositories/contracts/IRideRepository";
 import type { IRideRequestStore } from "@/cache/contracts/IRideRequestStore";
 import type { IDriverStatusStore } from "@/cache/contracts/IDriverStatusStore";
 import type { IRideEventPublisher } from "@/messaging/contracts/IRideEventPublisher";
 import type { ProfileService } from "@/services/profile.service";
-import { userRepository } from "@/repositories";
+import { clientRepository } from "@/repositories";
 import { rideRepository } from "@/repositories";
 import { rideRequestStore } from "@/cache";
 import { driverStatusStore } from "@/cache";
 import { rideEventPublisher } from "@/messaging";
 import { sessionStore } from "@/cache";
-import { userCache } from "@/cache";
+import { clientCache } from "@/cache";
 import { profileService } from "@/services/profile.service";
 import { randomUUID } from "crypto";
 import { isPgUniqueViolation } from "@/utils/database";
 import type { SessionMetadata } from "@/cache/contracts/ISessionStore";
 import { ACTIVE_RIDE_STATUSES } from "@/constants/ride";
 
-export class UserService {
+export class ClientService {
   constructor(
-    private readonly userRepo: IUserRepository,
+    private readonly clientRepo: IClientRepository,
     private readonly sessionStore: ISessionStore,
-    private readonly userCacheService: IUserCache,
+    private readonly clientCacheService: IClientCache,
     private readonly rideRepo: IRideRepository,
     private readonly rideRequestStore: IRideRequestStore,
     private readonly driverStatusStore: IDriverStatusStore,
@@ -54,12 +54,12 @@ export class UserService {
     private readonly profileService_: ProfileService,
   ) {}
 
-  async register(payload: RegisterUserDTO): Promise<{ id: string }> {
-    const validated = validateOrThrow(RegisterUserSchema, payload);
+  async register(payload: RegisterClientDTO): Promise<{ id: string }> {
+    const validated = validateOrThrow(RegisterClientSchema, payload);
 
     const hashedPassword = await hash(validated.password, 10);
     try {
-      return await this.userRepo.create({
+      return await this.clientRepo.create({
         fullName: validated.fullName,
         email: validated.email.toLowerCase(),
         cpf: validated.cpf,
@@ -79,7 +79,7 @@ export class UserService {
     const validated = validateOrThrow(SignInSchema, payload);
     const { email, password } = validated;
 
-    const user = await this.userRepo.findByEmail(email.toLowerCase());
+    const user = await this.clientRepo.findByEmail(email.toLowerCase());
     if (!user) throw APIError.unauthenticated("E-mail ou senha inválidos.");
     const validPassword = await compare(password, user.password);
     if (!validPassword) throw APIError.unauthenticated("E-mail ou senha inválidos.");
@@ -98,10 +98,10 @@ export class UserService {
   }
 
   async getMe(userID: string): Promise<GetMeResponse> {
-    const cached = await this.userCacheService.getProfile<GetMeResponse>(userID);
+    const cached = await this.clientCacheService.getProfile<GetMeResponse>(userID);
     if (cached) return cached;
 
-    const user = await this.userRepo.findById(userID);
+    const user = await this.clientRepo.findById(userID);
     if (!user) throw APIError.notFound("Usuário não encontrado.");
 
     const profile: GetMeResponse = {
@@ -113,8 +113,8 @@ export class UserService {
     };
 
     await Promise.all([
-      this.userCacheService.setProfile(userID, profile as unknown as Record<string, unknown>),
-      this.userCacheService.setBase(userID, { role: user.role, status: user.status }),
+      this.clientCacheService.setProfile(userID, profile as unknown as Record<string, unknown>),
+      this.clientCacheService.setBase(userID, { role: user.role, status: user.status }),
     ]);
 
     return profile;
@@ -149,7 +149,7 @@ export class UserService {
       throw APIError.unauthenticated("Sessão revogada.");
     }
 
-    const user = await this.userRepo.findById(session.userId);
+    const user = await this.clientRepo.findById(session.userId);
     if (!user) {
       throw APIError.notFound("Usuário não encontrado.");
     }
@@ -179,7 +179,7 @@ export class UserService {
     }));
   }
 
-  async getProfile(userID: string): Promise<UserProfileResponse> {
+  async getProfile(userID: string): Promise<ClientProfileResponse> {
     return this.profileService_.getProfile(userID);
   }
 
@@ -212,7 +212,7 @@ export class UserService {
     return { rideId };
   }
 
-  async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<UserProfileResponse> {
+  async updateProfile(userID: string, payload: UpdateProfileDTO): Promise<ClientProfileResponse> {
     return this.profileService_.updateProfile(userID, payload);
   }
 
@@ -285,10 +285,10 @@ export class UserService {
   }
 }
 
-export const userService = new UserService(
-  userRepository,
+export const clientService = new ClientService(
+  clientRepository,
   sessionStore,
-  userCache,
+  clientCache,
   rideRepository,
   rideRequestStore,
   driverStatusStore,

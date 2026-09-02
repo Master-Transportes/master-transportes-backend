@@ -1,11 +1,11 @@
-import type { Role, UserStatus } from "./shared.types.ts";
+import type { Role, ClientStatus } from "./shared.types.ts";
 
 export interface DashboardUserItem {
   id: string;
   fullName: string;
   email: string;
   role: Role;
-  status: UserStatus;
+  status: ClientStatus;
   banReason?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -49,6 +49,6 @@ export interface PaginatedUsersResponse {
 
 export interface DashboardActionResponse {
   id: string;
-  status: UserStatus;
+  status: ClientStatus;
   banReason?: string | null;
 }

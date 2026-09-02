@@ -3,12 +3,12 @@ import { users } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
 import { SYSTEM_ROLES } from "@/constants/system";
 import type {
-  IUserAdminRepository,
-  ListUsersData,
-  ListSystemUsersData,
-  AdminUserListResult,
+  IClientAdminRepository,
+  ListClientsData,
+  ListSystemClientsData,
+  AdminClientListResult,
   AdminActionResult,
-} from "./contracts/IUserAdminRepository";
+} from "./contracts/IClientAdminRepository";
 
 const LIST_COLUMNS = {
   id: users.id,
@@ -21,8 +21,8 @@ const LIST_COLUMNS = {
   updatedAt: users.updatedAt,
 } as const;
 
-export class UserAdminRepository implements IUserAdminRepository {
-  async listUsers(data: ListUsersData): Promise<AdminUserListResult> {
+export class ClientAdminRepository implements IClientAdminRepository {
+  async listClients(data: ListClientsData): Promise<AdminClientListResult> {
     const offset = (data.page - 1) * data.limit;
 
     const where = and(
@@ -43,7 +43,7 @@ export class UserAdminRepository implements IUserAdminRepository {
     const total = Number(countResult[0]?.count ?? 0);
 
     return {
-      users: result,
+      clients: result,
       total,
       page: data.page,
       limit: data.limit,
@@ -51,7 +51,7 @@ export class UserAdminRepository implements IUserAdminRepository {
     };
   }
 
-  async listSystemUsers(data: ListSystemUsersData): Promise<AdminUserListResult> {
+  async listSystemClients(data: ListSystemClientsData): Promise<AdminClientListResult> {
     const offset = (data.page - 1) * data.limit;
 
     const where = and(
@@ -72,7 +72,7 @@ export class UserAdminRepository implements IUserAdminRepository {
     const total = Number(countResult[0]?.count ?? 0);
 
     return {
-      users: result,
+      clients: result,
       total,
       page: data.page,
       limit: data.limit,
@@ -80,22 +80,22 @@ export class UserAdminRepository implements IUserAdminRepository {
     };
   }
 
-  async activateUser(userId: string): Promise<AdminActionResult | null> {
-    const [user] = await db
+  async activateClient(clientId: string): Promise<AdminActionResult | null> {
+    const [client] = await db
       .update(users)
       .set({ status: "ACTIVE", banReason: null, updatedAt: new Date() })
-      .where(eq(users.id, userId))
+      .where(eq(users.id, clientId))
       .returning({
         id: users.id,
         status: users.status,
         banReason: users.banReason,
       });
 
-    return user ?? null;
+    return client ?? null;
   }
 
-  async banUser(id: string, reason: string): Promise<AdminActionResult | null> {
-    const [user] = await db
+  async banClient(id: string, reason: string): Promise<AdminActionResult | null> {
+    const [client] = await db
       .update(users)
       .set({ status: "BANNED", banReason: reason, updatedAt: new Date() })
       .where(eq(users.id, id))
@@ -105,8 +105,8 @@ export class UserAdminRepository implements IUserAdminRepository {
         banReason: users.banReason,
       });
 
-    return user ?? null;
+    return client ?? null;
   }
 }
 
-export const userAdminRepository = new UserAdminRepository();
+export const clientAdminRepository = new ClientAdminRepository();

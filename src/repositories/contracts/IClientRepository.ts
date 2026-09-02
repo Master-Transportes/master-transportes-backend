@@ -1,6 +1,6 @@
-import type { Role, UserStatus } from "@/infra/database/schema";
+import type { Role, ClientStatus } from "@/infra/database/schema";
 
-export interface CreateUserData {
+export interface CreateClientData {
   fullName: string;
   email: string;
   cpf?: string;
@@ -9,7 +9,7 @@ export interface CreateUserData {
   role: Role;
 }
 
-export interface UpdateUserData {
+export interface UpdateClientData {
   fullName?: string;
   email?: string;
   cpf?: string;
@@ -17,32 +17,32 @@ export interface UpdateUserData {
   updatedAt: Date;
 }
 
-export interface UserRow {
+export interface ClientRow {
   id: string;
   fullName: string;
   email: string;
   cpf: string | null;
   cnpj: string | null;
   role: Role;
-  status: UserStatus;
+  status: ClientStatus;
   banReason: string | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
 }
 
-export interface UserPasswordRow {
+export interface ClientPasswordRow {
   id: string;
   password: string;
   role: string;
   status: string;
 }
 
-export interface IUserRepository {
-  findById(id: string): Promise<UserRow | null>;
+export interface IClientRepository {
+  findById(id: string): Promise<ClientRow | null>;
   findPasswordById(id: string): Promise<{ id: string; password: string } | null>;
-  findByEmail(email: string): Promise<UserPasswordRow | null>;
-  create(data: CreateUserData): Promise<{ id: string }>;
-  update(id: string, data: UpdateUserData): Promise<UserRow | null>;
+  findByEmail(email: string): Promise<ClientPasswordRow | null>;
+  create(data: CreateClientData): Promise<{ id: string }>;
+  update(id: string, data: UpdateClientData): Promise<ClientRow | null>;
   updatePassword(id: string, password: string): Promise<void>;
 }

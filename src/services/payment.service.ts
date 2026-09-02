@@ -3,7 +3,7 @@ import log from "encore.dev/log";
 import type { IPaymentRepository } from "@/repositories/contracts/IPaymentRepository";
 import type { IWalletRepository } from "@/repositories/contracts/IWalletRepository";
 import type { IWalletTransactionRepository } from "@/repositories/contracts/IWalletTransactionRepository";
-import type { IUserRepository } from "@/repositories/contracts/IUserRepository";
+import type { IClientRepository } from "@/repositories/contracts/IClientRepository";
 import type { IDriverRepository } from "@/repositories/contracts/IDriverRepository";
 import type { WalletDepositResponse } from "@/dto/payment.interface";
 import type { PayoutResponse } from "@/dto/wallet.interface";
@@ -11,7 +11,7 @@ import {
   paymentRepository,
   walletRepository,
   walletTransactionRepository,
-  userRepository,
+  clientRepository,
   driverRepository,
 } from "@/repositories";
 import { asaasClient, type IAsaasClient } from "@/integrations/asaas/asaas.client";
@@ -30,7 +30,7 @@ export class PaymentService {
     private readonly walletRepo: IWalletRepository,
     private readonly walletTxRepo: IWalletTransactionRepository,
     private readonly walletService: WalletService,
-    private readonly userRepo: IUserRepository,
+    private readonly clientRepo: IClientRepository,
     private readonly driverRepo: IDriverRepository,
     private readonly asaas: IAsaasClient,
   ) {}
@@ -283,7 +283,7 @@ export class PaymentService {
     cpf: string | null;
     cnpj: string | null;
   }> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.clientRepo.findById(userId);
     if (!user) throw APIError.notFound("Usuário não encontrado.");
     return {
       fullName: user.fullName,
@@ -299,7 +299,7 @@ export const paymentService = new PaymentService(
   walletRepository,
   walletTransactionRepository,
   walletService,
-  userRepository,
+  clientRepository,
   driverRepository,
   asaasClient,
 );

@@ -1,7 +1,7 @@
 import { APIError, middleware } from "encore.dev/api";
 import * as auth from "~encore/auth";
-import { userRepository } from "@/repositories";
-import { userCache } from "@/cache";
+import { clientRepository } from "@/repositories";
+import { clientCache } from "@/cache";
 
 export const AdminMiddleware = middleware({ target: { auth: true } }, async (req, next) => {
   const { userID, role } = auth.getAuthData()!;
@@ -10,7 +10,7 @@ export const AdminMiddleware = middleware({ target: { auth: true } }, async (req
     throw APIError.permissionDenied("Acesso administrativo obrigatório.");
   }
 
-  const cached = await userCache.getBase(userID);
+  const cached = await clientCache.getBase(userID);
   if (cached) {
     if (cached.role !== "ADMIN") {
       throw APIError.permissionDenied("Acesso administrativo obrigatório.");
@@ -21,12 +21,12 @@ export const AdminMiddleware = middleware({ target: { auth: true } }, async (req
     return next(req);
   }
 
-  const dbUser = await userRepository.findById(userID);
+  const dbUser = await clientRepository.findById(userID);
   if (!dbUser) {
     throw APIError.notFound("Usuário não encontrado.");
   }
 
-  await userCache.setBase(userID, { role: dbUser.role, status: dbUser.status });
+  await clientCache.setBase(userID, { role: dbUser.role, status: dbUser.status });
 
   if (dbUser.role !== "ADMIN") {
     throw APIError.permissionDenied("Acesso administrativo obrigatório.");

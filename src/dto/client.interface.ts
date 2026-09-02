@@ -1,4 +1,4 @@
-import type { Role, UserStatus } from "./shared.types.ts";
+import type { Role, ClientStatus } from "./shared.types.ts";
 
 export interface PaginationParams {
   page?: string;
@@ -13,16 +13,7 @@ export interface DepositParams {
   amountInCents: number;
 }
 
-export interface RegisterUserDTO {
-  fullName: string;
-  email: string;
-  cpf?: string;
-  cnpj?: string;
-  password: string;
-  confirmPassword: string;
-}
-
-export interface RegisterDriverDTO {
+export interface RegisterClientDTO {
   fullName: string;
   email: string;
   cpf?: string;
@@ -41,12 +32,12 @@ export interface ChangePasswordDTO {
   newPassword: string;
 }
 
-export interface UserProfileResponse {
+export interface ClientProfileResponse {
   id: string;
   fullName: string;
   email: string;
   role: Role;
-  status: UserStatus;
+  status: ClientStatus;
 }
 
 export interface OriginInfo {

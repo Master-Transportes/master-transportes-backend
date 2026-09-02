@@ -38,7 +38,7 @@ describe("RedisSessionStore", () => {
   afterAll(async () => {
     await Promise.all(createdSessionIds.map(id => sessionStore.revoke(id).catch(() => {})));
 
-    await Promise.all(createdUserIds.flatMap(userId => [redis.del(CACHE_KEYS.USER_SESSIONS(userId))]));
+    await Promise.all(createdUserIds.flatMap(userId => [redis.del(CACHE_KEYS.CLIENT_SESSIONS(userId))]));
 
     await Promise.all(createdEmails.map(email => db.delete(users).where(eq(users.email, email))));
   });

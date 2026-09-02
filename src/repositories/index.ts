@@ -1,5 +1,5 @@
-export { userRepository } from "./user.repository";
-export { userAdminRepository } from "./user-admin.repository";
+export { clientRepository } from "./client.repository";
+export { clientAdminRepository } from "./client-admin.repository";
 export { driverRepository } from "./driver.repository";
 export { rideRepository } from "./ride.repository";
 export { sessionRepository } from "./session.repository";

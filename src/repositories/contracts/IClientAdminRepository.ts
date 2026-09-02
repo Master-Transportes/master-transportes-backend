@@ -1,4 +1,4 @@
-export interface AdminUserRow {
+export interface AdminClientRow {
   id: string;
   fullName: string;
   email: string;
@@ -9,8 +9,8 @@ export interface AdminUserRow {
   updatedAt: Date;
 }
 
-export interface AdminUserListResult {
-  users: AdminUserRow[];
+export interface AdminClientListResult {
+  clients: AdminClientRow[];
   total: number;
   page: number;
   limit: number;
@@ -23,7 +23,7 @@ export interface AdminActionResult {
   banReason: string | null;
 }
 
-export interface ListUsersData {
+export interface ListClientsData {
   role: "CLIENT";
   page: number;
   limit: number;
@@ -31,16 +31,16 @@ export interface ListUsersData {
   status?: "ACTIVE" | "BANNED" | "INACTIVE";
 }
 
-export interface ListSystemUsersData {
+export interface ListSystemClientsData {
   page: number;
   limit: number;
   search: string;
   status?: "ACTIVE" | "BANNED" | "INACTIVE";
 }
 
-export interface IUserAdminRepository {
-  listUsers(data: ListUsersData): Promise<AdminUserListResult>;
-  listSystemUsers(data: ListSystemUsersData): Promise<AdminUserListResult>;
-  activateUser(userId: string): Promise<AdminActionResult | null>;
-  banUser(id: string, reason: string): Promise<AdminActionResult | null>;
+export interface IClientAdminRepository {
+  listClients(data: ListClientsData): Promise<AdminClientListResult>;
+  listSystemClients(data: ListSystemClientsData): Promise<AdminClientListResult>;
+  activateClient(clientId: string): Promise<AdminActionResult | null>;
+  banClient(id: string, reason: string): Promise<AdminActionResult | null>;
 }

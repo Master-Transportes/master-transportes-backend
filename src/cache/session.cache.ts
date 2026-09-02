@@ -39,8 +39,8 @@ export class SessionStore implements ISessionStore {
     const cacheData = { ...session, refreshTokenHash };
     await Promise.all([
       redis.set(CACHE_KEYS.SESSION(session.id), JSON.stringify(cacheData), "EX", SESSION_CACHE_TTL_SECONDS),
-      redis.sadd(CACHE_KEYS.USER_SESSIONS(input.userId), session.id),
-      redis.expire(CACHE_KEYS.USER_SESSIONS(input.userId), SESSION_CACHE_TTL_SECONDS),
+      redis.sadd(CACHE_KEYS.CLIENT_SESSIONS(input.userId), session.id),
+      redis.expire(CACHE_KEYS.CLIENT_SESSIONS(input.userId), SESSION_CACHE_TTL_SECONDS),
     ]);
 
     return { sessionId: session.id, refreshToken };
@@ -87,11 +87,11 @@ export class SessionStore implements ISessionStore {
     const rotated = await this.sessionRepo.rotateRefreshToken(sessionId, oldHash, newHash);
     if (!rotated) {
       await this.sessionRepo.revokeAllByUserId(session.userId);
-      const oldSessionIds = await redis.smembers(CACHE_KEYS.USER_SESSIONS(session.userId));
+      const oldSessionIds = await redis.smembers(CACHE_KEYS.CLIENT_SESSIONS(session.userId));
       if (oldSessionIds.length > 0) {
         await Promise.all([
           ...oldSessionIds.map((id: string) => redis.del(CACHE_KEYS.SESSION(id))),
-          redis.del(CACHE_KEYS.USER_SESSIONS(session.userId)),
+          redis.del(CACHE_KEYS.CLIENT_SESSIONS(session.userId)),
         ]);
       }
       return null;
@@ -110,9 +110,9 @@ export class SessionStore implements ISessionStore {
     await redis.del(CACHE_KEYS.SESSION(sessionId));
 
     if (session) {
-      const remaining = await redis.srem(CACHE_KEYS.USER_SESSIONS(session.userId), sessionId);
+      const remaining = await redis.srem(CACHE_KEYS.CLIENT_SESSIONS(session.userId), sessionId);
       if (remaining === 0) {
-        await redis.del(CACHE_KEYS.USER_SESSIONS(session.userId));
+        await redis.del(CACHE_KEYS.CLIENT_SESSIONS(session.userId));
       }
     }
   }
@@ -120,11 +120,11 @@ export class SessionStore implements ISessionStore {
   async revokeAll(userId: string): Promise<void> {
     await this.sessionRepo.revokeAllByUserId(userId);
 
-    const sessionIds = await redis.smembers(CACHE_KEYS.USER_SESSIONS(userId));
+    const sessionIds = await redis.smembers(CACHE_KEYS.CLIENT_SESSIONS(userId));
     if (sessionIds.length > 0) {
       await Promise.all([
         ...sessionIds.map((id: string) => redis.del(CACHE_KEYS.SESSION(id))),
-        redis.del(CACHE_KEYS.USER_SESSIONS(userId)),
+        redis.del(CACHE_KEYS.CLIENT_SESSIONS(userId)),
       ]);
     }
   }
@@ -134,7 +134,7 @@ export class SessionStore implements ISessionStore {
   }
 
   async getUserSessionIds(userId: string): Promise<string[]> {
-    return redis.smembers(CACHE_KEYS.USER_SESSIONS(userId));
+    return redis.smembers(CACHE_KEYS.CLIENT_SESSIONS(userId));
   }
 
   async findAllActiveByUserId(userId: string): Promise<SessionRow[]> {
@@ -142,6 +142,6 @@ export class SessionStore implements ISessionStore {
   }
 
   async count(userId: string): Promise<number> {
-    return redis.scard(CACHE_KEYS.USER_SESSIONS(userId));
+    return redis.scard(CACHE_KEYS.CLIENT_SESSIONS(userId));
   }
 }

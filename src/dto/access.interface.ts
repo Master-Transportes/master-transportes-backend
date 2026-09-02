@@ -1,4 +1,4 @@
-import type { UserStatus } from "./shared.types.ts";
+import type { ClientStatus } from "./shared.types.ts";
 
 export interface SignInDTO {
   email: string;
@@ -49,6 +49,6 @@ export interface GetMeResponse {
   id: string;
   fullName: string;
   email: string;
-  status: UserStatus;
+  status: ClientStatus;
   banReason: string | null;
 }

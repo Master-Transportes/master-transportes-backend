@@ -10,13 +10,13 @@ import type {
 import { validateOrThrow } from "@/validations/schema-validator";
 import { BanUserSchema, ListUsersSchema, ListSystemUsersSchema } from "@/validations/dto/dashboard.validate";
 import type {
-  IUserAdminRepository,
-  ListUsersData,
-  ListSystemUsersData,
-} from "@/repositories/contracts/IUserAdminRepository";
-import type { IUserCache } from "@/cache/contracts/IUserCache";
-import { userAdminRepository } from "@/repositories";
-import { userCache } from "@/cache";
+  IClientAdminRepository,
+  ListClientsData,
+  ListSystemClientsData,
+} from "@/repositories/contracts/IClientAdminRepository";
+import type { IClientCache } from "@/cache/contracts/IClientCache";
+import { clientAdminRepository } from "@/repositories";
+import { clientCache } from "@/cache";
 
 function toDashboardUserItem(row: {
   id: string;
@@ -41,7 +41,7 @@ function toDashboardUserItem(row: {
 }
 
 function toPaginatedResponse(result: {
-  users: {
+  clients: {
     id: string;
     fullName: string;
     email: string;
@@ -57,7 +57,7 @@ function toPaginatedResponse(result: {
   totalPages: number;
 }): PaginatedUsersResponse {
   return {
-    users: result.users.map(toDashboardUserItem),
+    users: result.clients.map(toDashboardUserItem),
     total: result.total,
     page: result.page,
     limit: result.limit,
@@ -75,40 +75,40 @@ function toDashboardAction(result: { id: string; status: string; banReason: stri
 
 export class DashboardService {
   constructor(
-    private readonly userAdminRepo: IUserAdminRepository,
-    private readonly userCacheService: IUserCache,
+    private readonly clientAdminRepo: IClientAdminRepository,
+    private readonly clientCacheService: IClientCache,
   ) {}
 
   async listUsers(params: ListUsersParams): Promise<PaginatedUsersResponse> {
-    const data: ListUsersData = validateOrThrow(ListUsersSchema, params);
-    const result = await this.userAdminRepo.listUsers(data);
+    const data: ListClientsData = validateOrThrow(ListUsersSchema, params);
+    const result = await this.clientAdminRepo.listClients(data);
     return toPaginatedResponse(result);
   }
 
   async listSystemUsers(params: ListSystemUsersParams): Promise<PaginatedUsersResponse> {
-    const data: ListSystemUsersData = validateOrThrow(ListSystemUsersSchema, params);
-    const result = await this.userAdminRepo.listSystemUsers(data);
+    const data: ListSystemClientsData = validateOrThrow(ListSystemUsersSchema, params);
+    const result = await this.clientAdminRepo.listSystemClients(data);
     return toPaginatedResponse(result);
   }
 
   async activateUser(userId: string): Promise<DashboardActionResponse> {
-    const result = await this.userAdminRepo.activateUser(userId);
+    const result = await this.clientAdminRepo.activateClient(userId);
     if (!result) {
       throw APIError.notFound("Usuário não encontrado.");
     }
-    await this.userCacheService.invalidate(userId);
+    await this.clientCacheService.invalidate(userId);
     return toDashboardAction(result);
   }
 
   async banUser(payload: BanUserParams): Promise<DashboardActionResponse> {
     const { reason } = validateOrThrow(BanUserSchema, payload);
-    const result = await this.userAdminRepo.banUser(payload.id, reason);
+    const result = await this.clientAdminRepo.banClient(payload.id, reason);
     if (!result) {
       throw APIError.notFound("Usuário não encontrado.");
     }
-    await this.userCacheService.invalidate(payload.id);
+    await this.clientCacheService.invalidate(payload.id);
     return toDashboardAction(result);
   }
 }
 
-export const dashboardService = new DashboardService(userAdminRepository, userCache);
+export const dashboardService = new DashboardService(clientAdminRepository, clientCache);

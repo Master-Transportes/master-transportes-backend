@@ -2,14 +2,14 @@ import { eq, and, isNull } from "drizzle-orm";
 import { users } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
 import type {
-  IUserRepository,
-  UserRow,
-  UserPasswordRow,
-  CreateUserData,
-  UpdateUserData,
-} from "./contracts/IUserRepository";
+  IClientRepository,
+  ClientRow,
+  ClientPasswordRow,
+  CreateClientData,
+  UpdateClientData,
+} from "./contracts/IClientRepository";
 
-const USER_COLUMNS = {
+const CLIENT_COLUMNS = {
   id: users.id,
   fullName: users.fullName,
   email: users.email,
@@ -23,25 +23,25 @@ const USER_COLUMNS = {
   deletedAt: users.deletedAt,
 } as const;
 
-export class UserRepository implements IUserRepository {
-  async findById(id: string): Promise<UserRow | null> {
-    const [user] = await db
-      .select(USER_COLUMNS)
+export class ClientRepository implements IClientRepository {
+  async findById(id: string): Promise<ClientRow | null> {
+    const [client] = await db
+      .select(CLIENT_COLUMNS)
       .from(users)
       .where(and(eq(users.id, id), isNull(users.deletedAt)));
-    return user ?? null;
+    return client ?? null;
   }
 
   async findPasswordById(id: string): Promise<{ id: string; password: string } | null> {
-    const [user] = await db
+    const [client] = await db
       .select({ id: users.id, password: users.password })
       .from(users)
       .where(and(eq(users.id, id), isNull(users.deletedAt)));
-    return user ?? null;
+    return client ?? null;
   }
 
-  async findByEmail(email: string): Promise<UserPasswordRow | null> {
-    const [user] = await db
+  async findByEmail(email: string): Promise<ClientPasswordRow | null> {
+    const [client] = await db
       .select({
         id: users.id,
         password: users.password,
@@ -50,17 +50,17 @@ export class UserRepository implements IUserRepository {
       })
       .from(users)
       .where(and(eq(users.email, email), isNull(users.deletedAt)));
-    return user ?? null;
+    return client ?? null;
   }
 
-  async create(data: CreateUserData): Promise<{ id: string }> {
-    const [user] = await db.insert(users).values(data).returning({ id: users.id });
-    return user;
+  async create(data: CreateClientData): Promise<{ id: string }> {
+    const [client] = await db.insert(users).values(data).returning({ id: users.id });
+    return client;
   }
 
-  async update(id: string, data: UpdateUserData): Promise<UserRow | null> {
-    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning(USER_COLUMNS);
-    return user ?? null;
+  async update(id: string, data: UpdateClientData): Promise<ClientRow | null> {
+    const [client] = await db.update(users).set(data).where(eq(users.id, id)).returning(CLIENT_COLUMNS);
+    return client ?? null;
   }
 
   async updatePassword(id: string, password: string): Promise<void> {
@@ -68,4 +68,4 @@ export class UserRepository implements IUserRepository {
   }
 }
 
-export const userRepository = new UserRepository();
+export const clientRepository = new ClientRepository();

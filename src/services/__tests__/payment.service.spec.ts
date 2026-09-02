@@ -7,7 +7,7 @@ import {
   walletRepository,
   walletTransactionRepository,
   paymentRepository,
-  userRepository,
+  clientRepository,
   driverRepository,
 } from "@/repositories";
 import { walletService } from "@/services/wallet.service";
@@ -105,7 +105,7 @@ const paymentServiceTest = new PaymentService(
   walletRepository,
   walletTransactionRepository,
   walletService,
-  userRepository,
+  clientRepository,
   driverRepository,
   asaasStub,
 );
