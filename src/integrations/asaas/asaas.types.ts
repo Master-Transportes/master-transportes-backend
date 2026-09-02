@@ -76,3 +76,27 @@ export interface AsaasError {
     description: string;
   }>;
 }
+
+export interface CreateAsaasCustomerData {
+  name: string;
+  cpfCnpj: string;
+  email?: string;
+  externalReference?: string;
+}
+
+export interface CreateAsaasPaymentData {
+  customer: string;
+  billingType: "PIX";
+  value: number;
+  dueDate: string;
+  description?: string;
+  externalReference?: string;
+}
+
+export interface CreateAsaasTransferData {
+  value: number;
+  pixAddressKey: string;
+  pixAddressKeyType: string;
+  description?: string;
+  externalReference?: string;
+}

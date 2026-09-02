@@ -27,6 +27,11 @@ import type {
 } from "@/dto/driver.interface";
 import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
 import type {
+  LogoutResponse,
+  RevokeSessionParams,
+  ListSessionsResponse,
+} from "@/dto/access.interface";
+import type {
   WalletResponse,
   WalletBalanceResponse,
   WalletTransactionListResponse,
@@ -206,5 +211,42 @@ export const requestPayout = api<DepositParams, PayoutResponse>(
   async payload => {
     const { userID } = auth.getAuthData()!;
     return paymentService.requestPayout(userID, payload.amountInCents);
+  },
+);
+
+export const logout = api<void, LogoutResponse>(
+  { expose: true, method: "POST", path: "/driver/logout", auth: true },
+  async () => {
+    const { sessionID } = auth.getAuthData()!;
+    await driverService.logout(sessionID);
+    return { message: "Logout realizado com sucesso." };
+  },
+);
+
+export const logoutAll = api<void, LogoutResponse>(
+  { expose: true, method: "POST", path: "/driver/logout-all", auth: true },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.logoutAll(userID);
+    return { message: "Todas as sessões foram encerradas." };
+  },
+);
+
+export const listSessions = api<void, ListSessionsResponse>(
+  { expose: true, method: "GET", path: "/driver/sessions", auth: true },
+  async () => {
+    const { userID, sessionID } = auth.getAuthData()!;
+    const sessions = await driverService.getUserSessions(userID);
+    const result = sessions.map(s => ({ ...s, isCurrent: s.id === sessionID }));
+    return { sessions: result };
+  },
+);
+
+export const revokeSession = api<RevokeSessionParams, LogoutResponse>(
+  { expose: true, method: "DELETE", path: "/driver/sessions/:sessionId", auth: true },
+  async params => {
+    const { userID } = auth.getAuthData()!;
+    await driverService.revokeSession(userID, params.sessionId);
+    return { message: "Sessão encerrada com sucesso." };
   },
 );

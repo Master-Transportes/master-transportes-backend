@@ -32,7 +32,6 @@ import type { IRideEventPublisher } from "@/messaging/contracts/IRideEventPublis
 import { driverRepository } from "@/repositories";
 import { rideRepository } from "@/repositories";
 import { sessionStore } from "@/cache";
-import { sessionRepository } from "@/repositories";
 import { driverCache } from "@/cache";
 import { driverLocationCache } from "@/cache";
 import { driverStatusStore } from "@/cache";
@@ -132,11 +131,23 @@ export class DriverService {
   }
 
   async revokeSession(userId: string, sessionId: string): Promise<void> {
-    const session = await sessionRepository.findById(sessionId);
+    const session = await this.sessionStore.get(sessionId);
     if (!session || session.userId !== userId) {
       throw APIError.notFound("Sessão não encontrada.");
     }
     await this.sessionStore.revoke(sessionId);
+  }
+
+  async getUserSessions(driverId: string) {
+    const sessions = await this.sessionStore.findAllActiveByUserId(driverId);
+    return sessions.map(s => ({
+      id: s.id,
+      deviceId: s.deviceId,
+      userAgent: s.userAgent,
+      ipAddress: s.ipAddress,
+      createdAt: s.createdAt,
+      lastSeenAt: s.lastSeenAt,
+    }));
   }
 
   async refreshSession(refreshToken: string): Promise<RefreshResponse> {

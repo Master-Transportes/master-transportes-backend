@@ -78,6 +78,9 @@ const asaasStub: IAsaasClient = {
     expirationDate: "2026-09-02",
     description: "",
   }),
+  getPaymentStatus: async () => ({
+    status: "PENDING",
+  }),
   createTransfer: async data => {
     if (failTransfer) {
       throw new Error("Asaas transfer failed");
@@ -422,9 +425,7 @@ describe("PaymentService", () => {
 
       const transferErr = await paymentServiceTest.requestPayout(testDriverId, 1500).catch((e: unknown) => e);
       expect(transferErr).toBeInstanceOf(Error);
-      expect((transferErr as Error).message).toBe(
-        "Não foi possível processar o saque no momento. Tente novamente.",
-      );
+      expect((transferErr as Error).message).toBe("Não foi possível processar o saque no momento. Tente novamente.");
 
       const after = await walletRepository.findById(testDriverWalletId);
       expect(after!.balance).toBe(beforeBalance);
