@@ -2,6 +2,14 @@ import { APICallMeta, currentRequest } from "encore.dev";
 import { APIError, middleware } from "encore.dev/api";
 import { redis } from "@/infra/cache";
 import { RATE_LIMITS, type RateLimitAction } from "@/constants/rate-limit";
+import log from "encore.dev/log";
+
+const CIRCUIT_TIMEOUT_MS = 30_000;
+const FAILURE_THRESHOLD = 3;
+
+let circuitOpen = false;
+let circuitOpenSince: Date | null = null;
+let consecutiveFailures = 0;
 
 function getHeaderValue(value: string | string[] | undefined): string | undefined {
   if (typeof value === "string") return value;
@@ -36,22 +44,44 @@ interface RateLimitMiddlewareOptions {
 
 export const createRateLimitMiddleware = (options: RateLimitMiddlewareOptions) =>
   middleware({ target: { auth: false } }, async (req, next) => {
+    if (circuitOpen) {
+      if (Date.now() - circuitOpenSince!.getTime() > CIRCUIT_TIMEOUT_MS) {
+        circuitOpen = false;
+        circuitOpenSince = null;
+        consecutiveFailures = 0;
+      } else {
+        return next(req);
+      }
+    }
+
     const meta = req.requestMeta as APICallMeta;
     const identifier = options.resolveIdentifier(meta);
     const config = RATE_LIMITS[options.action];
     const key = `${config.key}:${identifier}`;
 
-    const current = await redis.incr(key);
-    if (current === 1) {
-      await redis.expire(key, config.windowSeconds);
-    }
+    try {
+      const current = await redis.incr(key);
+      if (current === 1) {
+        await redis.expire(key, config.windowSeconds);
+      }
 
-    if (current > config.limit) {
-      const ttl = await redis.ttl(key);
-      throw APIError.resourceExhausted(`Limite de requisições excedido. Tente novamente em ${ttl} segundos.`);
-    }
+      if (current > config.limit) {
+        throw APIError.resourceExhausted("Limite de requisições excedido. Tente novamente mais tarde.");
+      }
 
-    return next(req);
+      consecutiveFailures = 0;
+      return next(req);
+    } catch (err) {
+      if (err instanceof APIError) throw err;
+
+      consecutiveFailures++;
+      if (consecutiveFailures >= FAILURE_THRESHOLD) {
+        circuitOpen = true;
+        circuitOpenSince = new Date();
+        log.warn("Rate limit circuit OPEN (Redis unavailable)");
+      }
+      return next(req);
+    }
   });
 
 export const loginRateLimit = createRateLimitMiddleware({

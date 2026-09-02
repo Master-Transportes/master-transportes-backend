@@ -4,6 +4,7 @@ import { z, ZodError } from "zod";
 import { rideRequestStore } from "@/cache";
 import log from "encore.dev/log";
 import { ensureChannel } from "@/infra/messaging/connection";
+import { startWithRetry } from "@/utils/retry";
 
 const EXCHANGE = "ride.exchange";
 const QUEUE = "api.ride.no.drivers";
@@ -49,6 +50,4 @@ export async function startConsumer(): Promise<void> {
   log.info("ride-no-drivers consumer started", { component: "ride-no-drivers-consumer" });
 }
 
-startConsumer().catch(err => {
-  log.error("Failed to start ride-no-drivers consumer", { error: err, component: "ride-no-drivers-consumer" });
-});
+startWithRetry(startConsumer, { component: "ride-no-drivers-consumer" });

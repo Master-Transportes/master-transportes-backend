@@ -7,6 +7,7 @@ import { rideRepository } from "@/repositories";
 import { rideRequestStore } from "@/cache";
 import log from "encore.dev/log";
 import { ensureChannel } from "@/infra/messaging/connection";
+import { startWithRetry } from "@/utils/retry";
 import type { CreateRideData } from "@/repositories/contracts/IRideRepository";
 
 const EXCHANGE = "ride.exchange";
@@ -86,6 +87,4 @@ export async function startConsumer(): Promise<void> {
   log.info("ride-accepted consumer started", { component: "ride-accepted-consumer" });
 }
 
-startConsumer().catch(err => {
-  log.error("Failed to start ride-accepted consumer", { error: err, component: "ride-accepted-consumer" });
-});
+startWithRetry(startConsumer, { component: "ride-accepted-consumer" });

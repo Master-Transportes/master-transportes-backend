@@ -4,6 +4,7 @@ import { z, ZodError } from "zod";
 import { rideRequestStore } from "@/cache";
 import log from "encore.dev/log";
 import { ensureChannel } from "@/infra/messaging/connection";
+import { startWithRetry } from "@/utils/retry";
 
 const EXCHANGE = "ride.exchange";
 const QUEUE = "api.ride.matching.cancelled";
@@ -48,9 +49,4 @@ export async function startConsumer(): Promise<void> {
   log.info("ride-matching-cancelled consumer started", { component: "ride-matching-cancelled-consumer" });
 }
 
-startConsumer().catch(err => {
-  log.error("Failed to start ride-matching-cancelled consumer", {
-    error: err,
-    component: "ride-matching-cancelled-consumer",
-  });
-});
+startWithRetry(startConsumer, { component: "ride-matching-cancelled-consumer" });

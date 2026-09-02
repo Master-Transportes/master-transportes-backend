@@ -3,8 +3,9 @@ import Redis from "ioredis";
 import log from "encore.dev/log";
 
 const REDIS_URL = process.env.REDIS_STATE_URL ?? "redis://127.0.0.1:6379";
-
 const REDIS_PASSWORD = process.env.REDIS_PASSWORD;
+
+const LOG_THROTTLE_MS = 30_000;
 
 const baseOptions = {
   lazyConnect: true,
@@ -13,7 +14,20 @@ const baseOptions = {
   password: REDIS_PASSWORD,
   maxRetriesPerRequest: 5,
   enableReadyCheck: true,
+  enableOfflineQueue: false,
+  reconnectOnError: (err: Error) => {
+    const targetError = "READONLY";
+    if (err.message.includes(targetError)) {
+      log.warn("Reconnecting on READONLY error", { error: err, component: "redis-client" });
+      return true;
+    }
+    return false;
+  },
 };
+
+let lastErrorLoggedAt = 0;
+let errorCount = 0;
+let firstErrorAt: Date | null = null;
 
 export function createRedisClient(): Redis {
   const client = new Redis(REDIS_URL, baseOptions);
@@ -23,11 +37,26 @@ export function createRedisClient(): Redis {
   });
 
   client.on("error", (err: Error) => {
-    log.error("Redis error", { error: err, component: "redis-client" });
+    errorCount++;
+    if (!firstErrorAt) firstErrorAt = new Date();
+
+    const now = Date.now();
+    if (now - lastErrorLoggedAt >= LOG_THROTTLE_MS) {
+      const downFor = ((now - firstErrorAt.getTime()) / 1000).toFixed(0);
+      log.error(`Redis unreachable for ${downFor}s (${errorCount} attempts)`, {
+        error: err,
+        component: "redis-client",
+      });
+      lastErrorLoggedAt = now;
+    }
   });
 
   client.on("connect", () => {
-    log.info("Redis connected", { component: "redis-client" });
+    const downFor = firstErrorAt ? ((Date.now() - firstErrorAt.getTime()) / 1000).toFixed(0) : "0";
+    log.info(`Redis connected after ${downFor}s downtime`, { component: "redis-client" });
+    firstErrorAt = null;
+    errorCount = 0;
+    lastErrorLoggedAt = 0;
   });
 
   client.on("ready", () => {
@@ -38,11 +67,16 @@ export function createRedisClient(): Redis {
     log.warn("Redis connection closed", { component: "redis-client" });
   });
 
-  client.on("reconnecting", () => {
-    log.warn("Redis reconnecting", { component: "redis-client" });
-  });
-
   return client;
 }
 
 export const redis = createRedisClient();
+
+export async function pingRedis(): Promise<boolean> {
+  try {
+    await redis.ping();
+    return true;
+  } catch {
+    return false;
+  }
+}

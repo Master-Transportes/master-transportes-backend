@@ -1,13 +1,14 @@
-import { createRedisClient } from "@/infra/cache/redis-client";
+import { redis } from "@/infra/cache/redis-client";
 import { driverLocationCache } from "./driver-location.cache";
+import { startWithRetry } from "@/utils/retry";
 import log from "encore.dev/log";
 
 const EXPIRED_CHANNEL = "__keyevent@0__:expired";
 const HEARTBEAT_SUFFIX = ":heartbeat";
 
-export async function startDriverCleanupListener(): Promise<void> {
-  const subscriber = createRedisClient();
+const subscriber = redis.duplicate();
 
+export async function startDriverCleanupListener(): Promise<void> {
   await subscriber.config("SET", "notify-keyspace-events", "Ex");
 
   await subscriber.subscribe(EXPIRED_CHANNEL);
@@ -38,9 +39,4 @@ export async function startDriverCleanupListener(): Promise<void> {
   });
 }
 
-startDriverCleanupListener().catch(err => {
-  log.error("Failed to start driver cleanup listener", {
-    error: err,
-    component: "expiration-listener",
-  });
-});
+startWithRetry(startDriverCleanupListener, { component: "expiration-listener" });

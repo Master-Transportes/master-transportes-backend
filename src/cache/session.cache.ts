@@ -2,9 +2,26 @@ import { CACHE_KEYS } from "@/infra/cache/keys-cache";
 import { redis } from "@/infra/cache/redis-client";
 import { SESSION_CACHE_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from "@/constants/cache";
 import { generateRefreshToken, hashRefreshToken } from "@/auth/auth";
+import { safeJsonParse, execPipelineSettled, smembersSafe } from "@/utils/redis-helpers";
+import { z } from "zod";
+import log from "encore.dev/log";
 import type { SessionRow, NewSession } from "@/infra/database/schema";
 import type { ISessionRepository } from "@/repositories/contracts/ISessionRepository";
 import type { ISessionStore, SessionMetadata } from "./contracts/ISessionStore";
+
+const SessionCacheSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  userType: z.enum(["CLIENT", "DRIVER"]),
+  refreshTokenHash: z.string(),
+  deviceId: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  ipAddress: z.string().nullable(),
+  createdAt: z.coerce.date(),
+  lastSeenAt: z.coerce.date(),
+  expiresAt: z.coerce.date(),
+  revokedAt: z.coerce.date().nullable(),
+});
 
 export class SessionStore implements ISessionStore {
   constructor(private readonly sessionRepo: ISessionRepository) {}
@@ -37,28 +54,44 @@ export class SessionStore implements ISessionStore {
     const session = await this.sessionRepo.create(sessionData);
 
     const cacheData = { ...session, refreshTokenHash };
-    await Promise.all([
-      redis.set(CACHE_KEYS.SESSION(session.id), JSON.stringify(cacheData), "EX", SESSION_CACHE_TTL_SECONDS),
-      redis.sadd(CACHE_KEYS.CLIENT_SESSIONS(input.userId), session.id),
-      redis.expire(CACHE_KEYS.CLIENT_SESSIONS(input.userId), SESSION_CACHE_TTL_SECONDS),
-    ]);
+    const pipeline = redis.pipeline();
+    pipeline.set(CACHE_KEYS.SESSION(session.id), JSON.stringify(cacheData), "EX", SESSION_CACHE_TTL_SECONDS);
+    pipeline.sadd(CACHE_KEYS.CLIENT_SESSIONS(input.userId), session.id);
+    pipeline.expire(CACHE_KEYS.CLIENT_SESSIONS(input.userId), SESSION_CACHE_TTL_SECONDS);
+    await execPipelineSettled(pipeline);
 
     return { sessionId: session.id, refreshToken };
   }
 
   async get(sessionId: string): Promise<SessionRow | null> {
-    const cached = await redis.get(CACHE_KEYS.SESSION(sessionId));
-    if (cached) {
-      const parsed = JSON.parse(cached) as SessionRow;
-      if (parsed.revokedAt) return null;
-      return parsed;
+    try {
+      const cached = await redis.get(CACHE_KEYS.SESSION(sessionId));
+      const parsed = safeJsonParse(cached, SessionCacheSchema);
+      if (parsed) {
+        if (parsed.revokedAt) return null;
+        return parsed;
+      }
+    } catch (err) {
+      log.warn("Redis read failed, falling back to database", {
+        error: err,
+        sessionId,
+        component: "session-store",
+      });
     }
 
     const session = await this.sessionRepo.findById(sessionId);
     if (!session) return null;
 
-    const cacheData = { ...session };
-    await redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(cacheData), "EX", SESSION_CACHE_TTL_SECONDS);
+    try {
+      const cacheData = { ...session };
+      await redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(cacheData), "EX", SESSION_CACHE_TTL_SECONDS);
+    } catch (err) {
+      log.warn("Redis write failed during session read", {
+        error: err,
+        sessionId,
+        component: "session-store",
+      });
+    }
 
     return session;
   }
@@ -87,18 +120,36 @@ export class SessionStore implements ISessionStore {
     const rotated = await this.sessionRepo.rotateRefreshToken(sessionId, oldHash, newHash);
     if (!rotated) {
       await this.sessionRepo.revokeAllByUserId(session.userId);
-      const oldSessionIds = await redis.smembers(CACHE_KEYS.CLIENT_SESSIONS(session.userId));
-      if (oldSessionIds.length > 0) {
-        await Promise.all([
-          ...oldSessionIds.map((id: string) => redis.del(CACHE_KEYS.SESSION(id))),
-          redis.del(CACHE_KEYS.CLIENT_SESSIONS(session.userId)),
-        ]);
+
+      try {
+        const oldSessionIds = await smembersSafe(redis, CACHE_KEYS.CLIENT_SESSIONS(session.userId));
+        if (oldSessionIds.length > 0) {
+          const pipeline = redis.pipeline();
+          oldSessionIds.forEach(id => pipeline.del(CACHE_KEYS.SESSION(id)));
+          pipeline.del(CACHE_KEYS.CLIENT_SESSIONS(session.userId));
+          await pipeline.exec();
+        }
+      } catch (err) {
+        log.warn("Redis cache cleanup failed during token rotation (revokeAll)", {
+          error: err,
+          userId: session.userId,
+          component: "session-store",
+        });
       }
+
       return null;
     }
 
     const updatedSession = { ...session, refreshTokenHash: newHash };
-    await redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(updatedSession), "EX", SESSION_CACHE_TTL_SECONDS);
+    try {
+      await redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(updatedSession), "EX", SESSION_CACHE_TTL_SECONDS);
+    } catch (err) {
+      log.warn("Redis write failed during token rotation", {
+        error: err,
+        sessionId,
+        component: "session-store",
+      });
+    }
 
     return newRefreshToken;
   }
@@ -107,25 +158,47 @@ export class SessionStore implements ISessionStore {
     const session = await this.sessionRepo.findById(sessionId);
 
     await this.sessionRepo.revoke(sessionId);
-    await redis.del(CACHE_KEYS.SESSION(sessionId));
 
-    if (session) {
-      const remaining = await redis.srem(CACHE_KEYS.CLIENT_SESSIONS(session.userId), sessionId);
-      if (remaining === 0) {
-        await redis.del(CACHE_KEYS.CLIENT_SESSIONS(session.userId));
+    try {
+      const pipeline = redis.pipeline();
+      pipeline.del(CACHE_KEYS.SESSION(sessionId));
+      if (session) {
+        pipeline.srem(CACHE_KEYS.CLIENT_SESSIONS(session.userId), sessionId);
       }
+      const results = await pipeline.exec();
+
+      if (session) {
+        const sremResult = results?.[1]?.[1] as number | undefined;
+        if (typeof sremResult === "number" && sremResult === 0) {
+          await redis.del(CACHE_KEYS.CLIENT_SESSIONS(session.userId));
+        }
+      }
+    } catch (err) {
+      log.warn("Redis cache cleanup failed after revoke", {
+        error: err,
+        sessionId,
+        component: "session-store",
+      });
     }
   }
 
   async revokeAll(userId: string): Promise<void> {
     await this.sessionRepo.revokeAllByUserId(userId);
 
-    const sessionIds = await redis.smembers(CACHE_KEYS.CLIENT_SESSIONS(userId));
-    if (sessionIds.length > 0) {
-      await Promise.all([
-        ...sessionIds.map((id: string) => redis.del(CACHE_KEYS.SESSION(id))),
-        redis.del(CACHE_KEYS.CLIENT_SESSIONS(userId)),
-      ]);
+    try {
+      const sessionIds = await smembersSafe(redis, CACHE_KEYS.CLIENT_SESSIONS(userId));
+      if (sessionIds.length > 0) {
+        const pipeline = redis.pipeline();
+        sessionIds.forEach(id => pipeline.del(CACHE_KEYS.SESSION(id)));
+        pipeline.del(CACHE_KEYS.CLIENT_SESSIONS(userId));
+        await pipeline.exec();
+      }
+    } catch (err) {
+      log.warn("Redis cache cleanup failed after revokeAll", {
+        error: err,
+        userId,
+        component: "session-store",
+      });
     }
   }
 
@@ -134,7 +207,7 @@ export class SessionStore implements ISessionStore {
   }
 
   async getUserSessionIds(userId: string): Promise<string[]> {
-    return redis.smembers(CACHE_KEYS.CLIENT_SESSIONS(userId));
+    return smembersSafe(redis, CACHE_KEYS.CLIENT_SESSIONS(userId));
   }
 
   async findAllActiveByUserId(userId: string): Promise<SessionRow[]> {
