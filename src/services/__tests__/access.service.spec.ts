@@ -48,13 +48,13 @@ describe("AccessService", () => {
       await clientService.logoutAll(userId).catch(() => {});
     }
 
-    await Promise.all(
-      createdUserIds.flatMap(userId => [
-        redis.del(CACHE_KEYS.CLIENT(userId)),
-        redis.del(CACHE_KEYS.CLIENT_BASE(userId)),
-        redis.del(CACHE_KEYS.CLIENT_SESSIONS(userId)),
-      ]),
-    );
+    const pipeline = redis.pipeline();
+    createdUserIds.forEach(userId => {
+      pipeline.del(CACHE_KEYS.CLIENT(userId));
+      pipeline.del(CACHE_KEYS.CLIENT_BASE(userId));
+      pipeline.del(CACHE_KEYS.CLIENT_SESSIONS(userId));
+    });
+    await pipeline.exec();
 
     await Promise.all(createdEmails.map(email => db.delete(users).where(eq(users.email, email))));
   });
@@ -62,12 +62,12 @@ describe("AccessService", () => {
   beforeEach(async () => {
     for (const userId of createdUserIds) {
       const sessionIds = await sessionStore.getUserSessionIds(userId);
-      await Promise.all([
-        redis.del(CACHE_KEYS.CLIENT(userId)),
-        redis.del(CACHE_KEYS.CLIENT_BASE(userId)),
-        redis.del(CACHE_KEYS.CLIENT_SESSIONS(userId)),
-        ...sessionIds.map(id => redis.del(CACHE_KEYS.SESSION(id))),
-      ]);
+      const pipeline = redis.pipeline();
+      pipeline.del(CACHE_KEYS.CLIENT(userId));
+      pipeline.del(CACHE_KEYS.CLIENT_BASE(userId));
+      pipeline.del(CACHE_KEYS.CLIENT_SESSIONS(userId));
+      sessionIds.forEach(id => pipeline.del(CACHE_KEYS.SESSION(id)));
+      await pipeline.exec();
     }
   });
 

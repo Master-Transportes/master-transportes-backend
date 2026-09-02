@@ -1,6 +1,6 @@
 import { CACHE_KEYS } from "@/infra/cache/keys-cache";
 import { redis } from "@/infra/cache/redis-client";
-import { SESSION_CACHE_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS } from "@/constants/cache";
+import { SESSION_CACHE_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS, withJitter } from "@/constants/cache";
 import { generateRefreshToken, hashRefreshToken } from "@/auth/auth";
 import { safeJsonParse, execPipelineSettled, smembersSafe } from "@/utils/redis-helpers";
 import { z } from "zod";
@@ -55,9 +55,14 @@ export class SessionStore implements ISessionStore {
 
     const cacheData = { ...session, refreshTokenHash };
     const pipeline = redis.pipeline();
-    pipeline.set(CACHE_KEYS.SESSION(session.id), JSON.stringify(cacheData), "EX", SESSION_CACHE_TTL_SECONDS);
+    pipeline.set(
+      CACHE_KEYS.SESSION(session.id),
+      JSON.stringify(cacheData),
+      "EX",
+      withJitter(SESSION_CACHE_TTL_SECONDS),
+    );
     pipeline.sadd(CACHE_KEYS.CLIENT_SESSIONS(input.userId), session.id);
-    pipeline.expire(CACHE_KEYS.CLIENT_SESSIONS(input.userId), SESSION_CACHE_TTL_SECONDS);
+    pipeline.expire(CACHE_KEYS.CLIENT_SESSIONS(input.userId), withJitter(SESSION_CACHE_TTL_SECONDS));
     await execPipelineSettled(pipeline);
 
     return { sessionId: session.id, refreshToken };
@@ -84,7 +89,12 @@ export class SessionStore implements ISessionStore {
 
     try {
       const cacheData = { ...session };
-      await redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(cacheData), "EX", SESSION_CACHE_TTL_SECONDS);
+      await redis.set(
+        CACHE_KEYS.SESSION(sessionId),
+        JSON.stringify(cacheData),
+        "EX",
+        withJitter(SESSION_CACHE_TTL_SECONDS),
+      );
     } catch (err) {
       log.warn("Redis write failed during session read", {
         error: err,
@@ -142,7 +152,12 @@ export class SessionStore implements ISessionStore {
 
     const updatedSession = { ...session, refreshTokenHash: newHash };
     try {
-      await redis.set(CACHE_KEYS.SESSION(sessionId), JSON.stringify(updatedSession), "EX", SESSION_CACHE_TTL_SECONDS);
+      await redis.set(
+        CACHE_KEYS.SESSION(sessionId),
+        JSON.stringify(updatedSession),
+        "EX",
+        withJitter(SESSION_CACHE_TTL_SECONDS),
+      );
     } catch (err) {
       log.warn("Redis write failed during token rotation", {
         error: err,
