@@ -31,7 +31,6 @@ services:
       --protected-mode no
       --maxmemory 512mb
       --maxmemory-policy volatile-lru
-      --notify-keyspace-events Ex
     ports:
       - "6379:6379"
     volumes:
@@ -47,39 +46,6 @@ services:
       timeout: 5s
       retries: 30
 
-  rabbitmq:
-    image: rabbitmq:4.3.2-management
-    container_name: mt_rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin}
-    ports:
-      - "5672:5672" # porta AMQP (protocolo)
-      - "15672:15672" # porta da interface web
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - master-transporte-network
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  nginx:
-    image: nginx:alpine
-    container_name: mt_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - rabbitmq
-    networks:
-      - master-transporte-network
-
 networks:
   master-transporte-network:
     name: master-transporte-network
@@ -88,4 +54,3 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  rabbitmq_data:

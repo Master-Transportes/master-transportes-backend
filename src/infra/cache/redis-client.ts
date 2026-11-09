@@ -1,9 +1,9 @@
-import "dotenv/config";
 import Redis from "ioredis";
 import log from "encore.dev/log";
+import { getRedisPassword, getRedisUrl } from "@/config/env";
 
-const REDIS_URL = process.env.REDIS_STATE_URL ?? "redis://127.0.0.1:6379";
-const REDIS_PASSWORD = process.env.REDIS_PASSWORD;
+const REDIS_URL = getRedisUrl();
+const REDIS_PASSWORD = getRedisPassword();
 
 const LOG_THROTTLE_MS = 30_000;
 

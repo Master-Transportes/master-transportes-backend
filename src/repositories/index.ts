@@ -1,8 +1,18 @@
-export { clientRepository } from "./client.repository";
-export { clientAdminRepository } from "./client-admin.repository";
-export { driverRepository } from "./driver.repository";
-export { rideRepository } from "./ride.repository";
-export { sessionRepository } from "./session.repository";
-export { walletRepository } from "./wallet.repository";
-export { walletTransactionRepository } from "./wallet-transaction.repository";
-export { paymentRepository } from "./payment.repository";
+export { DrizzleUserRepository, userRepository, type UserRepository } from "./user/user.repository";
+export type {
+  CreateClientAccountInput,
+  UserAuth,
+  UserAuthState,
+  UserProfile,
+} from "./user/user.types";
+
+export { DrizzleDriverRepository, driverRepository, type DriverRepository } from "./driver/driver.repository";
+export type { CreateDriverAccountInput, DriverProfileWithUser } from "./driver/driver.types";
+
+export { DrizzleSessionRepository, sessionRepository, type SessionRepository } from "./session/session.repository";
+export type {
+  ActiveSessionRecord,
+  CreateSessionInput,
+  RotateSessionInput,
+  SessionRecord,
+} from "./session/session.types";

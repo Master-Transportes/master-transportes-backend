@@ -1,330 +1,199 @@
-import { sql, desc } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   pgTable,
+  pgEnum,
   uuid,
   varchar,
-  integer,
+  text,
+  date,
   timestamp,
-  doublePrecision,
   index,
   uniqueIndex,
-  boolean,
-  date,
-  jsonb,
+  primaryKey,
+  check,
 } from "drizzle-orm/pg-core";
-import type {
-  WalletTransactionType,
-  WalletTransactionDirection,
-  WalletTransactionStatus,
-  PaymentStatus,
-} from "./types";
-export type {
-  WalletTransactionType,
-  WalletTransactionDirection,
-  WalletTransactionStatus,
-  PaymentStatus,
-} from "./types";
+import { AccountStatus, ROLES, ACCOUNT_STATUSES } from "@/domain/identity/identity.types";
+import {
+  DRIVER_STATUSES,
+  DRIVER_DOCUMENT_TYPES,
+  DRIVER_DOCUMENT_VERIFICATION_STATUSES,
+  DriverStatus,
+  DriverDocumentVerificationStatus,
+} from "@/domain/driver/driver.types";
 
-export const ROLES = ["CLIENT", "ADMIN", "EMPLOYEE"] as const;
-export type Role = (typeof ROLES)[number];
+// ---------------------------------------------------------------------------
+// Enums PostgreSQL
+// ---------------------------------------------------------------------------
+export const userRoleEnum = pgEnum("user_role", ROLES);
+export const accountStatusEnum = pgEnum("account_status", ACCOUNT_STATUSES);
+export const driverStatusEnum = pgEnum("driver_status", DRIVER_STATUSES);
+export const documentTypeEnum = pgEnum("document_type", DRIVER_DOCUMENT_TYPES);
+export const documentVerificationStatusEnum = pgEnum(
+  "document_verification_status",
+  DRIVER_DOCUMENT_VERIFICATION_STATUSES,
+);
 
-export const CLIENT_STATUSES = ["ACTIVE", "BANNED", "INACTIVE"] as const;
-export type ClientStatus = (typeof CLIENT_STATUSES)[number];
+/** Todos os timestamps são timestamptz em UTC (armazenamento independente de fuso). */
+const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
-export const DRIVER_STATUSES = ["PENDING", "APPROVED", "REJECTED", "SUSPENDED", "BANNED"] as const;
-export type DriverStatus = (typeof DRIVER_STATUSES)[number];
-
-export const RIDE_STATUSES = ["DRIVER_ASSIGNED", "DRIVER_ARRIVING", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;
-export type RideStatus = (typeof RIDE_STATUSES)[number];
-
-export const WALLET_STATUSES = ["ACTIVE", "SUSPENDED", "CLOSED"] as const;
-export type WalletStatus = (typeof WALLET_STATUSES)[number];
-
+// ---------------------------------------------------------------------------
+// users — identidade única de qualquer pessoa na plataforma
+// ---------------------------------------------------------------------------
 export const users = pgTable(
   "users",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    fullName: varchar("full_name", { length: 120 }).notNull(),
-    email: varchar("email", { length: 255 }).notNull().unique(),
+    fullName: varchar("full_name", { length: 150 }).notNull(),
+    email: varchar("email", { length: 254 }).notNull(),
+    phone: varchar("phone", { length: 20 }),
     cpf: varchar("cpf", { length: 11 }),
-    cnpj: varchar("cnpj", { length: 14 }),
-    password: varchar("password").notNull(),
-    role: varchar("role", { length: 20 }).$type<Role>().notNull().default("CLIENT"),
-    status: varchar("status", { length: 20 }).$type<ClientStatus>().notNull().default("ACTIVE"),
-    banReason: varchar("ban_reason", { length: 255 }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    deletedAt: timestamp("deleted_at"),
+    passwordHash: text("password_hash").notNull(),
+    status: accountStatusEnum("status").notNull().default(AccountStatus.ACTIVE),
+    emailVerifiedAt: timestamptz("email_verified_at"),
+    phoneVerifiedAt: timestamptz("phone_verified_at"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+    updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+    deletedAt: timestamptz("deleted_at"),
   },
-  table => [
-    index("users_role_idx").on(table.role),
-    index("users_status_idx").on(table.status),
-    index("users_created_at_idx").on(table.createdAt),
-    sql`CONSTRAINT users_role_check CHECK (${table.role} IN ('CLIENT', 'ADMIN', 'EMPLOYEE'))`,
-    sql`CONSTRAINT users_status_check CHECK (${table.status} IN ('ACTIVE', 'BANNED', 'INACTIVE'))`,
+  t => [
+    // E-mail único entre contas ativas, sem distinção de maiúsculas/minúsculas.
+    uniqueIndex("users_email_lower_unique")
+      .on(sql`lower(${t.email})`)
+      .where(sql`deleted_at IS NULL`),
+    // CPF único quando informado; NULL não conflita na semântica do índice único.
+    uniqueIndex("users_cpf_unique")
+      .on(t.cpf)
+      .where(sql`deleted_at IS NULL`),
+    index("users_status_idx").on(t.status),
+    check("users_full_name_not_blank", sql`length(trim(full_name)) > 0`),
+    check("users_email_not_blank", sql`length(trim(email)) > 0`),
+    check("users_password_hash_not_blank", sql`length(password_hash) > 0`),
   ],
 );
 
-export const drivers = pgTable(
-  "drivers",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    fullName: varchar("full_name", { length: 120 }).notNull(),
-    email: varchar("email", { length: 255 }).notNull().unique(),
-    cpf: varchar("cpf", { length: 11 }),
-    cnpj: varchar("cnpj", { length: 14 }),
-    pixKey: varchar("pix_key", { length: 255 }),
-    pixKeyType: varchar("pix_key_type", { length: 10 }),
-    password: varchar("password").notNull(),
-    status: varchar("status", { length: 20 }).$type<DriverStatus>().notNull().default("PENDING"),
-    rejectionReason: varchar("rejection_reason", { length: 255 }),
-    banReason: varchar("ban_reason", { length: 255 }),
-    approvedAt: timestamp("approved_at"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    deletedAt: timestamp("deleted_at"),
-  },
-  table => [
-    index("drivers_status_idx").on(table.status),
-    index("drivers_created_at_idx").on(table.createdAt),
-    sql`CONSTRAINT drivers_status_check CHECK (${table.status} IN ('PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED', 'BANNED'))`,
-  ],
-);
+export type UserRow = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
 
-export const driverLicenses = pgTable(
-  "driver_licenses",
+// ---------------------------------------------------------------------------
+// user_roles — papéis múltiplos por conta (CLIENT + DRIVER simultâneos)
+// ---------------------------------------------------------------------------
+export const userRoles = pgTable(
+  "user_roles",
   {
-    id: uuid("id").defaultRandom().primaryKey(),
-    driverId: uuid("driver_id")
-      .notNull()
-      .references(() => drivers.id, { onDelete: "cascade" }),
-    cnh: varchar("cnh", { length: 20 }).notNull(),
-    category: varchar("category", { length: 5 }).notNull(),
-    validFrom: date("valid_from").notNull().defaultNow(),
-    validUntil: date("valid_until"),
-    isActive: boolean("is_active").default(false).notNull(),
-    isVerified: boolean("is_verified").default(false),
-    verifiedAt: timestamp("verified_at"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    deletedAt: timestamp("deleted_at"),
-  },
-  table => [
-    index("driver_licenses_driver_id_idx").on(table.driverId),
-    uniqueIndex("driver_licenses_active_unique")
-      .on(table.driverId)
-      .where(sql`"is_active" = true`),
-    uniqueIndex("driver_licenses_cnh_unique").on(table.cnh),
-  ],
-);
-
-export const vehicles = pgTable(
-  "vehicles",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    driverId: uuid("driver_id")
-      .notNull()
-      .references(() => drivers.id, { onDelete: "cascade" }),
-    brand: varchar("brand", { length: 50 }).notNull(),
-    model: varchar("model", { length: 80 }).notNull(),
-    year: integer("year").notNull(),
-    color: varchar("color", { length: 30 }).notNull(),
-    plate: varchar("plate", { length: 10 }).notNull().unique(),
-    isActive: boolean("is_active").default(false).notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    deletedAt: timestamp("deleted_at"),
-  },
-  table => [
-    index("vehicles_driver_id_idx").on(table.driverId),
-    index("vehicles_plate_idx").on(table.plate),
-    uniqueIndex("vehicles_active_unique")
-      .on(table.driverId)
-      .where(sql`"is_active" = true`),
-  ],
-);
-
-export const rides = pgTable(
-  "rides",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    clientId: uuid("client_id")
+    userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    driverId: uuid("driver_id")
-      .notNull()
-      .references(() => drivers.id, { onDelete: "cascade" }),
-    status: varchar("status", { length: 30 }).$type<RideStatus>().notNull().default("DRIVER_ASSIGNED"),
-    startedAt: timestamp("started_at"),
-    completedAt: timestamp("completed_at"),
-    cancelledAt: timestamp("cancelled_at"),
-    price: integer("price"),
-    distance: integer("distance"),
-    duration: integer("duration"),
-    cancelledBy: varchar("cancelled_by", { length: 20 }),
-    cancelReason: varchar("cancel_reason", { length: 255 }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    deletedAt: timestamp("deleted_at"),
+    role: userRoleEnum("role").notNull(),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
   },
-  table => [
-    index("rides_client_id_idx").on(table.clientId),
-    index("rides_driver_id_idx").on(table.driverId),
-    index("rides_status_idx").on(table.status),
-    index("rides_created_at_idx").on(table.createdAt),
-    index("rides_client_id_status_idx").on(table.clientId, table.status),
-    index("rides_driver_id_status_idx").on(table.driverId, table.status),
-    sql`CONSTRAINT rides_status_check CHECK (${table.status} IN ('DRIVER_ASSIGNED', 'DRIVER_ARRIVING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'))`,
+  t => [
+    primaryKey({ columns: [t.userId, t.role], name: "user_roles_pkey" }),
+    index("user_roles_role_idx").on(t.role),
   ],
 );
 
-export const rideLocations = pgTable(
-  "ride_locations",
+export type UserRoleRow = typeof userRoles.$inferSelect;
+export type NewUserRole = typeof userRoles.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// driver_profiles — 1:0..1 com users; nunca duplica dados de identidade
+// ---------------------------------------------------------------------------
+export const driverProfiles = pgTable(
+  "driver_profiles",
   {
-    rideId: uuid("ride_id")
+    userId: uuid("user_id")
       .notNull()
-      .primaryKey()
-      .references(() => rides.id, { onDelete: "cascade" }),
-    originName: varchar("origin_name", { length: 200 }).notNull(),
-    originLat: doublePrecision("origin_lat").notNull(),
-    originLng: doublePrecision("origin_lng").notNull(),
-    originH3: varchar("origin_h3", { length: 20 }).notNull(),
-    destinationName: varchar("destination_name", { length: 200 }).notNull(),
-    destinationLat: doublePrecision("destination_lat").notNull(),
-    destinationLng: doublePrecision("destination_lng").notNull(),
-    destinationH3: varchar("destination_h3", { length: 20 }).notNull(),
-    regionId: varchar("region_id", { length: 30 }).notNull().default("am-interior"),
-    municipalityId: varchar("municipality_id", { length: 20 }).notNull().default("unknown"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-    deletedAt: timestamp("deleted_at"),
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: driverStatusEnum("status").notNull().default(DriverStatus.PENDING),
+    reviewedAt: timestamptz("reviewed_at"),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    rejectionReason: text("rejection_reason"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+    updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+    deletedAt: timestamptz("deleted_at"),
   },
-  table => [
-    index("ride_locations_region_id_idx").on(table.regionId),
-    index("ride_locations_municipality_id_idx").on(table.municipalityId),
+  t => [
+    primaryKey({ columns: [t.userId], name: "driver_profiles_pkey" }),
+    index("driver_profiles_status_idx").on(t.status),
   ],
 );
 
-export const SESSION_USER_TYPES = ["CLIENT", "DRIVER"] as const;
-export type SessionUserType = (typeof SESSION_USER_TYPES)[number];
+export type DriverProfileRow = typeof driverProfiles.$inferSelect;
+export type NewDriverProfile = typeof driverProfiles.$inferInsert;
 
+// ---------------------------------------------------------------------------
+// driver_documents — metadados de documentos do motorista (sem binários/URLs)
+// ---------------------------------------------------------------------------
+export const driverDocuments = pgTable(
+  "driver_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    driverUserId: uuid("driver_user_id")
+      .notNull()
+      .references(() => driverProfiles.userId, { onDelete: "cascade" }),
+    type: documentTypeEnum("type").notNull(),
+    documentNumber: varchar("document_number", { length: 40 }),
+    licenseCategory: varchar("license_category", { length: 10 }),
+    issuedOn: date("issued_on", { mode: "string" }),
+    expiresOn: date("expires_on", { mode: "string" }),
+    storageKey: text("storage_key"),
+    verificationStatus: documentVerificationStatusEnum("verification_status")
+      .notNull()
+      .default(DriverDocumentVerificationStatus.PENDING),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamptz("reviewed_at"),
+    rejectionReason: text("rejection_reason"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+    updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+    deletedAt: timestamptz("deleted_at"),
+  },
+  t => [
+    // Apenas um documento ATIVO (não removido) por tipo por motorista:
+    // substituição = soft delete do anterior + nova linha (histórico preservado).
+    uniqueIndex("driver_documents_active_unique")
+      .on(t.driverUserId, t.type)
+      .where(sql`deleted_at IS NULL`),
+    index("driver_documents_expires_on_idx").on(t.expiresOn),
+    check(
+      "driver_documents_dates_check",
+      sql`expires_on IS NULL OR issued_on IS NULL OR expires_on >= issued_on`,
+    ),
+    // license_category só é válido para CNH (mantenha em sincronia com DRIVER_DOCUMENT_TYPES).
+    check("driver_documents_category_type_check", sql`license_category IS NULL OR type = 'CNH'`),
+    // Categorias de CNH válidas: A, B, C, D, E, AC, AD, AE.
+    check(
+      "driver_documents_category_values_check",
+      sql`license_category IS NULL OR license_category IN ('A', 'B', 'C', 'D', 'E', 'AC', 'AD', 'AE')`,
+    ),
+  ],
+);
+
+export type DriverDocumentRow = typeof driverDocuments.$inferSelect;
+export type NewDriverDocument = typeof driverDocuments.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// sessions — sessões de autenticação ligadas diretamente a users
+// (sem userType, sem deviceId/userAgent/ipAddress/lastSeenAt)
+// ---------------------------------------------------------------------------
 export const sessions = pgTable(
   "sessions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: uuid("user_id").notNull(),
-    userType: varchar("user_type", { length: 20 }).$type<SessionUserType>().notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     refreshTokenHash: varchar("refresh_token_hash", { length: 64 }).notNull(),
-    deviceId: varchar("device_id", { length: 255 }),
-    userAgent: varchar("user_agent", { length: 500 }),
-    ipAddress: varchar("ip_address", { length: 45 }),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
-    revokedAt: timestamp("revoked_at"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+    updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+    expiresAt: timestamptz("expires_at").notNull(),
+    revokedAt: timestamptz("revoked_at"),
   },
-  table => [
-    index("sessions_user_id_idx").on(table.userId),
-    index("sessions_refresh_token_hash_idx").on(table.refreshTokenHash),
-    index("sessions_expires_at_idx").on(table.expiresAt),
+  t => [
+    index("sessions_user_id_idx").on(t.userId),
+    index("sessions_refresh_token_hash_idx").on(t.refreshTokenHash),
+    index("sessions_expires_at_idx").on(t.expiresAt),
   ],
 );
 
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
-
-export const wallets = pgTable(
-  "wallets",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    ownerId: uuid("owner_id").notNull(),
-    ownerType: varchar("owner_type", { length: 10 }).notNull(),
-    balance: integer("balance").notNull().default(0),
-    currency: varchar("currency", { length: 3 }).notNull().default("BRL"),
-    status: varchar("status", { length: 20 }).$type<WalletStatus>().notNull().default("ACTIVE"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  table => [
-    uniqueIndex("wallets_owner_unique").on(table.ownerId, table.ownerType),
-    index("wallets_status_idx").on(table.status),
-    sql`CONSTRAINT wallets_status_check CHECK (${table.status} IN ('ACTIVE', 'SUSPENDED', 'CLOSED'))`,
-    sql`CONSTRAINT wallets_balance_check CHECK (${table.balance} >= 0)`,
-    sql`CONSTRAINT wallets_owner_type_check CHECK (${table.ownerType} IN ('USER', 'DRIVER'))`,
-  ],
-);
-
-export const walletTransactions = pgTable(
-  "wallet_transactions",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    walletId: uuid("wallet_id")
-      .notNull()
-      .references(() => wallets.id, { onDelete: "cascade" }),
-    rideId: uuid("ride_id").references(() => rides.id, { onDelete: "set null" }),
-    type: varchar("type", { length: 30 }).$type<WalletTransactionType>().notNull(),
-    direction: varchar("direction", { length: 6 }).$type<WalletTransactionDirection>().notNull(),
-    amount: integer("amount").notNull(),
-    status: varchar("status", { length: 20 }).$type<WalletTransactionStatus>().notNull(),
-    reference: varchar("reference", { length: 255 }),
-    metadata: jsonb("metadata"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  table => [
-    index("wallet_transactions_wallet_id_idx").on(table.walletId),
-    index("wallet_transactions_wallet_id_created_at_idx").on(table.walletId, desc(table.createdAt)),
-    index("wallet_transactions_ride_id_idx").on(table.rideId),
-    index("wallet_transactions_type_idx").on(table.type),
-    index("wallet_transactions_status_idx").on(table.status),
-    index("wallet_transactions_created_at_idx").on(table.createdAt),
-    sql`CONSTRAINT wallet_transactions_type_check CHECK (${table.type} IN ('DEPOSIT', 'RIDE_EARNING', 'PAYOUT', 'ADJUSTMENT', 'REFUND'))`,
-    sql`CONSTRAINT wallet_transactions_direction_check CHECK (${table.direction} IN ('CREDIT', 'DEBIT'))`,
-    sql`CONSTRAINT wallet_transactions_status_check CHECK (${table.status} IN ('PENDING', 'COMPLETED', 'FAILED', 'REVERSED'))`,
-  ],
-);
-
-export const payments = pgTable(
-  "payments",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    walletId: uuid("wallet_id")
-      .notNull()
-      .references(() => wallets.id, { onDelete: "cascade" }),
-    customerId: uuid("customer_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    amount: integer("amount").notNull(),
-    currency: varchar("currency", { length: 3 }).notNull().default("BRL"),
-    provider: varchar("provider", { length: 30 }).notNull().default("ASAAS"),
-    providerPaymentId: varchar("provider_payment_id", { length: 255 }),
-    status: varchar("status", { length: 20 }).$type<PaymentStatus>().notNull().default("PENDING"),
-    description: varchar("description", { length: 500 }),
-    paidAt: timestamp("paid_at"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  table => [
-    index("payments_wallet_id_idx").on(table.walletId),
-    index("payments_customer_id_idx").on(table.customerId),
-    index("payments_provider_payment_id_idx").on(table.providerPaymentId),
-    uniqueIndex("payments_provider_unique")
-      .on(table.providerPaymentId)
-      .where(sql`${table.providerPaymentId} IS NOT NULL`),
-    sql`CONSTRAINT payments_status_check CHECK (${table.status} IN ('PENDING', 'CONFIRMED', 'RECEIVED', 'CANCELLED', 'REFUNDED', 'OVERDUE'))`,
-  ],
-);
-
-export const paymentWebhookEvents = pgTable(
-  "payment_webhook_events",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    provider: varchar("provider", { length: 30 }).notNull(),
-    externalEventId: varchar("external_event_id", { length: 255 }).notNull(),
-    eventType: varchar("event_type", { length: 50 }).notNull(),
-    payload: jsonb("payload").notNull(),
-    processedAt: timestamp("processed_at"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  _table => [sql`CONSTRAINT webhook_event_unique UNIQUE ("provider", "external_event_id")`],
-);

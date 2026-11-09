@@ -1,1 +1,0 @@
-ALTER TABLE "users" ALTER COLUMN "cpf_cnpj" SET NOT NULL;

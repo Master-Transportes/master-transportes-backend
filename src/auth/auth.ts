@@ -1,47 +1,55 @@
-import jwt from "jsonwebtoken";
-import { randomUUID, createHash, randomBytes } from "crypto";
-import type { AccessTokenPayload } from "@/dto/auth.interface";
-import { ACCESS_TOKEN_TTL_SECONDS } from "@/constants/cache";
+import { SignJWT, jwtVerify } from "jose";
+import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  JWT_ALGORITHM,
+  JWT_AUDIENCE,
+  JWT_CLOCK_TOLERANCE_SECONDS,
+  JWT_ISSUER,
+} from "@/constants/auth";
+import { getJwtSecret } from "@/config/env";
+import type { AccessTokenInput, VerifiedAccessToken } from "./auth.types";
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-if (!JWT_SECRET) throw new Error("variable JWT_SECRET is missing.");
-
-export const JWT_EXPIRES_IN = ACCESS_TOKEN_TTL_SECONDS;
-
-const ISSUER = "master-transporte";
-
-export function generateToken(payload: { sub: string; sid: string; role: "CLIENT" | "DRIVER" }): string {
-  return jwt.sign({ sid: payload.sid, role: payload.role }, JWT_SECRET, {
-    subject: payload.sub,
-    jwtid: randomUUID(),
-    issuer: ISSUER,
-    audience: payload.role === "DRIVER" ? "driver-app" : "client-app",
-    expiresIn: JWT_EXPIRES_IN,
-  });
+export function getJwtSecretKey(): Uint8Array {
+  return new TextEncoder().encode(getJwtSecret());
 }
 
-export function verifyToken(token: string): AccessTokenPayload {
-  const decoded = jwt.verify(token, JWT_SECRET, {
-    issuer: ISSUER,
-    audience: ["client-app", "driver-app"],
-  }) as jwt.JwtPayload;
+/** Emite o access token JWT (HS256) com os claims exigidos. */
+export async function signAccessToken(input: AccessTokenInput): Promise<string> {
+  const issuedAt = Math.floor(Date.now() / 1000);
 
-  return {
-    sub: decoded.sub!,
-    sid: decoded.sid as string,
-    jti: decoded.jti!,
-    role: decoded.role as "CLIENT" | "DRIVER",
-    iss: decoded.iss!,
-    aud: Array.isArray(decoded.aud) ? decoded.aud[0] : decoded.aud!,
-    iat: decoded.iat!,
-    exp: decoded.exp!,
-  };
+  return new SignJWT({ sid: input.sessionId })
+    .setProtectedHeader({ alg: JWT_ALGORITHM, typ: "JWT" })
+    .setSubject(input.subject)
+    .setJti(input.tokenId)
+    .setIssuer(JWT_ISSUER)
+    .setAudience(JWT_AUDIENCE)
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + ACCESS_TOKEN_TTL_SECONDS)
+    .sign(getJwtSecretKey());
 }
 
-export function generateRefreshToken(): string {
-  return randomBytes(32).toString("hex");
-}
+/**
+ * Verifica assinatura, issuer, audience e expiração.
+ * Retorna null para token inválido/expirado (→ 401). Erros de configuração
+ * do segredo propagam (falha de servidor, não de credencial).
+ */
+export async function verifyAccessToken(token: string): Promise<VerifiedAccessToken | null> {
+  const key = getJwtSecretKey();
 
-export function hashRefreshToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  try {
+    const { payload } = await jwtVerify(token, key, {
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+      clockTolerance: JWT_CLOCK_TOLERANCE_SECONDS,
+      algorithms: [JWT_ALGORITHM],
+    });
+
+    if (typeof payload.sub !== "string" || payload.sub.length === 0) return null;
+    if (typeof payload.sid !== "string" || payload.sid.length === 0) return null;
+    if (typeof payload.jti !== "string" || payload.jti.length === 0) return null;
+
+    return { subject: payload.sub, sessionId: payload.sid, tokenId: payload.jti };
+  } catch {
+    return null;
+  }
 }

@@ -1,1 +1,0 @@
-export const MIN_PAYOUT_AMOUNT_CENTS = 1000;

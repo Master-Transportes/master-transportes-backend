@@ -1,186 +1,51 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
+import { AuthRole } from "@/domain/identity/identity.types";
+import { authService } from "@/services/auth.service";
 import { driverService } from "@/services/driver.service";
-import { getRequestMetadata } from "@/middlewares/rate-limit.middleware";
+import { requireRole } from "@/auth/authorization";
 import type {
-  ChangePasswordDTO,
-  PaginationParams,
-  RegisterAccountResponse,
-  UpdateProfileDTO,
-} from "@/dto/client.interface";
-import type { RegisterDriverDTO } from "@/dto/driver.interface";
+  DriverMeResponse,
+  DriverRegisterRequest,
+  DriverRegisterResponse,
+} from "@/dto/driver.dto";
 import type {
-  UpdateDriverLocationDTO,
-  AcceptOfferDTO,
-  RejectOfferDTO,
-  CancelRideParams,
-  CompleteRideDTO,
-  ActiveRideResponse,
-  DriverStatusResponse,
-  DriverProfileResponse,
-  DriverRideListResponse,
-} from "@/dto/driver.interface";
-import type { SignInDTO, SignInResponse, RefreshDTO, RefreshResponse } from "@/dto/access.interface";
-import type { LogoutResponse, RevokeSessionParams, ListSessionsResponse } from "@/dto/access.interface";
+  LoginRequest,
+  LoginResponse,
+  LogoutResponse,
+  RefreshRequest,
+  RefreshResponse,
+} from "@/dto/auth.dto";
 
-export const login = api<SignInDTO, SignInResponse>(
-  { expose: true, method: "POST", path: "/driver/login", auth: false },
-  async payload => {
-    const meta = getRequestMetadata();
-    return driverService.signIn(payload, meta);
-  },
-);
-
-export const register = api<RegisterDriverDTO, RegisterAccountResponse>(
+export const register = api<DriverRegisterRequest, DriverRegisterResponse>(
   { expose: true, method: "POST", path: "/driver/register", auth: false },
   async payload => driverService.register(payload),
 );
 
-export const refresh = api<RefreshDTO, RefreshResponse>(
+export const login = api<LoginRequest, LoginResponse>(
+  { expose: true, method: "POST", path: "/driver/login", auth: false },
+  async payload => authService.login(payload, AuthRole.Driver),
+);
+
+export const refresh = api<RefreshRequest, RefreshResponse>(
   { expose: true, method: "POST", path: "/driver/refresh", auth: false },
-  async ({ refreshToken }) => driverService.refreshSession(refreshToken),
-);
-
-export const me = api<void, DriverProfileResponse>(
-  { expose: true, method: "GET", path: "/driver/me", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.getMe(userID);
-  },
-);
-
-export const updateProfile = api<UpdateProfileDTO, DriverProfileResponse>(
-  { expose: true, method: "PUT", path: "/driver/profile", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.updateProfile(userID, payload);
-  },
-);
-
-export const updatePassword = api<ChangePasswordDTO, void>(
-  { expose: true, method: "PUT", path: "/driver/password", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.changePassword(userID, payload);
-  },
-);
-
-export const updateLocation = api<UpdateDriverLocationDTO, void>(
-  { expose: true, method: "PUT", path: "/driver/location", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.updateLocation(userID, payload);
-  },
-);
-
-export const listRides = api<PaginationParams, DriverRideListResponse>(
-  { expose: true, method: "GET", path: "/driver/rides", auth: true },
-  async params => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.getRides(userID, {
-      page: params.page ? Number(params.page) : undefined,
-      limit: params.limit ? Number(params.limit) : undefined,
-    });
-  },
-);
-
-export const getActiveRide = api<void, ActiveRideResponse>(
-  { expose: true, method: "GET", path: "/driver/rides/active", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.getActiveRide(userID);
-  },
-);
-
-export const cancelRide = api<CancelRideParams, void>(
-  { expose: true, method: "DELETE", path: "/driver/rides/:rideId", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.cancelRide(userID, payload);
-  },
-);
-
-export const completeRide = api<CompleteRideDTO, ActiveRideResponse>(
-  { expose: true, method: "PUT", path: "/driver/rides/:rideId/complete", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.completeRide(userID, payload);
-  },
-);
-
-export const acceptOffer = api<AcceptOfferDTO, void>(
-  { expose: true, method: "POST", path: "/driver/offers/:offerId/accept", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.acceptOffer(userID, payload);
-  },
-);
-
-export const rejectOffer = api<RejectOfferDTO, void>(
-  { expose: true, method: "POST", path: "/driver/offers/:offerId/reject", auth: true },
-  async payload => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.rejectOffer(userID, payload);
-  },
-);
-
-export const goOnline = api<void, DriverStatusResponse>(
-  { expose: true, method: "POST", path: "/driver/status/online", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.goOnline(userID);
-  },
-);
-
-export const goOffline = api<void, DriverStatusResponse>(
-  { expose: true, method: "POST", path: "/driver/status/offline", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.goOffline(userID);
-  },
-);
-
-export const getStatus = api<void, DriverStatusResponse>(
-  { expose: true, method: "GET", path: "/driver/status", auth: true },
-  async () => {
-    const { userID } = auth.getAuthData()!;
-    return driverService.getStatus(userID);
-  },
+  async payload => authService.refresh(payload, AuthRole.Driver),
 );
 
 export const logout = api<void, LogoutResponse>(
   { expose: true, method: "POST", path: "/driver/logout", auth: true },
   async () => {
-    const { sessionID } = auth.getAuthData()!;
-    await driverService.logout(sessionID);
+    const authData = auth.getAuthData()!;
+    await authService.logout(authData);
     return { message: "Logout realizado com sucesso." };
   },
 );
 
-export const logoutAll = api<void, LogoutResponse>(
-  { expose: true, method: "POST", path: "/driver/logout-all", auth: true },
+export const me = api<void, DriverMeResponse>(
+  { expose: true, method: "GET", path: "/driver/me", auth: true },
   async () => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.logoutAll(userID);
-    return { message: "Todas as sessões foram encerradas." };
-  },
-);
-
-export const listSessions = api<void, ListSessionsResponse>(
-  { expose: true, method: "GET", path: "/driver/sessions", auth: true },
-  async () => {
-    const { userID, sessionID } = auth.getAuthData()!;
-    const sessions = await driverService.getUserSessions(userID);
-    const result = sessions.map(s => ({ ...s, isCurrent: s.id === sessionID }));
-    return { sessions: result };
-  },
-);
-
-export const revokeSession = api<RevokeSessionParams, LogoutResponse>(
-  { expose: true, method: "DELETE", path: "/driver/sessions/:sessionId", auth: true },
-  async params => {
-    const { userID } = auth.getAuthData()!;
-    await driverService.revokeSession(userID, params.sessionId);
-    return { message: "Sessão encerrada com sucesso." };
+    const authData = auth.getAuthData()!;
+    requireRole(authData, AuthRole.Driver);
+    return driverService.getMe(authData.userID);
   },
 );
