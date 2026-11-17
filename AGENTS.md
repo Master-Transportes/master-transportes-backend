@@ -1,258 +1,153 @@
 # AGENTS.md — Master Transporte B
 
 ## Prioridades
-1. Seguir implementação real do projeto — SEMPRE olhe o código antes de assumir
-2. Reutilizar padrões existentes — consistência > criar novo
-3. Sempre priorizar código limpo
+1. Seguir a implementação real — leia o código antes de assumir.
+2. Reutilizar padrões existentes — consistência > criar novo.
+3. Não criar abstração, índice, constraint ou camada sem necessidade concreta.
 
-## Contexto e Tokens
-Este arquivo é seu contexto PRIMÁRIO. Para documentação detalhada:
-- `README.md` — visão geral do projeto
-- `.github/copilot-instructions.md` — documentação do encore.dev nosso framework para o backend
+## Escopo atual
+Este repositório contém **somente identidade e autenticação** (clientes e motoristas).
+Não existem — e não devem ser recriados por suposição — carteira/wallet, pagamentos, Asaas,
+RabbitMQ, corridas, despacho, localização, dashboard admin, webhooks ou cache de domínio.
+Os commits antigos que citam esses módulos são histórico, não arquitetura vigente.
 
-Não carregue arquivos grandes sem necessidade.
-
-## Stack Atual
-| Tecnologia | Uso |
+## Stack efetiva
+| Tecnologia | Versão/Uso |
 |---|---|
-| encore.dev | Runtime e API endpoints |
-| TypeScript | Toda a base |
-| PostgreSQL | Dados persistentes (via Drizzle ORM) |
-| Redis (ioredis) | Cache de sessão, profile, wallet, localização |
-| RabbitMQ (amqplib) | Fila de eventos de rides |
-| Zod | Validação de schemas |
-| h3-js | Geohashing/hexágonos |
-| Prettier | Formatação de código (`.prettierrc` na raiz) |
+| Encore.ts | 1.58.4 — runtime e endpoints |
+| TypeScript | 5.9.3, `strict: true`, paths `@/*` e `~encore/*` |
+| PostgreSQL | 18 (Docker), acessado com `drizzle-orm` 0.45.2 + `postgres` 3.4.9 |
+| Zod | 4.x — validação de entrada |
+| bcrypt | 6 — hash de senha, custo 12 |
+| jose | 6 — JWT HS256 |
+| ioredis | 5 — instalado; o client em `src/infra/cache` **não tem consumidores** |
+| bun:test | testes, sempre via `encore exec` |
+| ESLint 9 + Prettier 3 | lint e formatação |
 
 ## Estrutura
 ```
-src/api/                → Endpoints encore.dev
-├── auth/               → SignIn, JWT, sessões
-├── dashboard/          → Admin: listar/banir/ativar usuários
-├── driver/             → Perfil, corridas, wallet do motorista
-├── user/               → Perfil, corridas, wallet do cliente
-├── webhooks/           → Webhooks externos (Asaas)
-src/services/           → Lógica de negócio (singletons, sem interfaces)
-├── wallet.service.ts
-├── payment.service.ts
-├── user.service.ts
-├── driver.service.ts
-├── profile.service.ts
-├── dashboard.service.ts
-└── __tests__/          → Testes de integração (bun:test)
-src/repositories/       → Acesso a dados
-├── contracts/          → Interfaces (I prefix) + tipos Row/Data
-├── mappers/            → Mapeamento DB row → domain row
-├── *.repository.ts     → Implementações
-├── index.ts            → Barrel (singletons)
-src/cache/              → Cache Redis
-├── contracts/          → Interfaces (I prefix + Cache/Store)
-├── *.cache.ts          → Implementações Redis
-├── index.ts            → Barrel (singletons)
-src/infra/              → Infraestrutura compartilada
-├── database/           → Drizzle schema, conexão, types
-├── cache/              → Redis client, keys-cache
-└── messaging/          → RabbitMQ connection (shared)
-src/messaging/          → Publicação e consumo de eventos
-├── contracts/          → IRideEventPublisher
-├── consumers/          → Consumers RabbitMQ (self-starting)
-├── ride-publisher.ts   → Publisher
-└── index.ts            → Barrel
-src/integrations/       → APIs externas isoladas
-└── asaas/              → Asaas (pagamento, webhook types)
-src/dto/                → Data Transfer Objects (interfaces)
-src/validations/        → Schemas Zod + validateOrThrow
-src/constants/          → Constantes de negócio
-src/middlewares/        → Auth, roles, rate limiting
-src/utils/              → Utils gerais (geo.ts, document.ts, database.ts)
+src/
+├── api/client/          # 5 endpoints de cliente + encore.service.ts (tag client-role)
+├── api/driver/          # 5 endpoints de motorista + encore.service.ts (tag driver-role)
+├── auth/                # AuthHandler, JWT, refresh token, bcrypt, requireRole
+├── domain/identity/     # AccountStatus, AuthRole, normalização/validação de CPF e telefone
+├── domain/driver/       # DriverStatus, tipos de documento, política de login
+├── dto/                 # contratos públicos (request/response)
+├── mappers/             # repositório → DTO (ex.: Date → ISO string)
+├── services/            # regra de negócio: classe + singleton, SEM interface
+├── repositories/        # interface + DrizzleXRepository + singleton, barrel em index.ts
+├── validations/         # schemas Zod + validateOrThrow
+├── constants/           # auth.ts, error-reasons.ts
+├── middlewares/         # autorização por papel (target por tag)
+├── config/env.ts        # única porta de entrada para variáveis de ambiente
+└── infra/
+    ├── database/        # schema.ts, relations.ts, drizzle.ts
+    └── cache/           # redis-client.ts (sem uso no momento)
 ```
 
-## Padrões de Código
+## Fluxo API → Service → Repository
+- **API**: define o endpoint, extrai auth, valida o payload e chama o service. Sem SQL nem regra de negócio.
+- **Service**: orquestra repositories, aplica regra e traduz erro de persistência. Recebe as interfaces dos repositories por constructor.
+- **Repository**: único lugar com Drizzle/SQL. Interface e classe no mesmo arquivo; singleton na última linha; exportado por `src/repositories/index.ts`.
 
-### Serviços (Services)
-- **SEM interfaces** — serviços são terminais, chamados direto pela API
-- Constructor injection com interfaces de infra (IWalletRepository, IWalletCache, etc.)
-- Singleton exportado na **última linha** do arquivo
-- Validação com `validateOrThrow` **dentro do service**, NOS endpoints
-- Errors com `APIError` do encore.dev (português)
-
-```typescript
-export class WalletService {
-  constructor(
-    private readonly walletRepo: IWalletRepository,
-    private readonly txRepo: IWalletTransactionRepository,
-    private readonly walletCache: IWalletCache,
-  ) {}
-
-  async getBalance(ownerId: string, ownerType: WalletOwnerType): Promise<WalletBalanceResponse> {
-    const validated = validateOrThrow(ListTransactionsSchema, options ?? {});
-    // ... lógica
-  }
-}
-export const walletService = new WalletService(walletRepository, walletTransactionRepository, walletCache);
-```
-
-### Repositórios
-- Interface: `I` + nome + `Repository` em `contracts/`
-- Tipos: `Row` suffix para rows, `Data` suffix para criação
-- Implementação: `class X implements IXRepository` + singleton
-- Colunas: constante `COLUMNS` com `as const`
-- Soft delete: `isNull(deletedAt)` em todas queries
-- Transactions: `db.transaction()` com `SELECT FOR UPDATE` para locks
-
-```typescript
-// contracts/IWalletRepository.ts
-export interface IWalletRepository {
-  findByOwner(ownerId: string, ownerType: WalletOwnerType): Promise<WalletRow | null>;
-  credit(walletId: string, data: CreditDebitData): Promise<WalletTransactionRow>;
-}
-```
-
-### Cache
-- Interface: `I` + nome + `Cache`/`Store` em `contracts/`
-- Keys: definidas em `infra/cache/keys-cache.ts` (funções)
-- TTL: definidos em `constants/cache.ts`
-- **Invalidação obrigatóRIA** em TODA operação de escrita no service
-- Balance cache: TTL 60s (wallet), profile cache: 600s
-
-```typescript
-// No service - SEMPRE invalidar após escrita
-async credit(...) {
-  const txEntry = await this.walletRepo.credit(walletId, { ... });
-  await this.walletCache.invalidate(walletId); // ← obrigatório
-  return txEntry;
-}
-```
-
-### Validações
-- Schemas: `PascalCase` + `Schema` em `validations/dto/{domain}.validate.ts`
-- Importar `z` de `"zod"`
-- `validateOrThrow(Schema, data)` retorna tipo inferido — NUNCA casting
-- ❌ NUNCA passar schema como parâmetro de método
-
-### Integrações Externas
-- Isoladas em `src/integrations/{provider}/`
-- Client HTTP com error class customizada
-- Types separados do client
-- Env vars para configuração (BASE_URL, API_KEY)
-
-### API Endpoints
-- Definidos com `api<Input, Output>()` do encore.dev
-- Auth: `auth: true` (requer JWT) / `auth: false` (público)
-- Extrair dados: `const { userID } = auth.getAuthData()!`
-- Endpoints são **finos**: extrair auth → chamar service → retornar
-- Paths: `/auth/*`, `/client/*`, `/driver/*`, `/dashboard/*`, `/webhooks/*`
-
-```typescript
-export const getBalance = api<void, WalletBalanceResponse>(
-  { expose: true, method: "GET", path: "/client/wallet/balance", auth: true },
+```ts
+export const me = api<void, ClientMeResponse>(
+  { expose: true, method: "GET", path: "/client/me", auth: true, sensitive: true },
   async () => {
     const { userID } = auth.getAuthData()!;
-    return walletService.getBalance(userID, "USER");
+    return clientService.getMe(userID);
   },
 );
 ```
 
-### Middlewares
-- Auth gateway: `auth.gateway.ts` (verifica JWT + sessão)
-- Roles: factory `createRoleMiddleware({ role, lookupFn, cache })`
-- Rate limit: factory `createRateLimitMiddleware({ action, resolveIdentifier })`
-- Webhook: validação de token via header customizado
-- Atribuídos no `encore.service.ts` de cada service
+## Endpoints existentes (10)
+- Cliente: `POST /client/register`, `POST /client/login`, `POST /client/refresh`, `POST /client/logout`, `GET /client/me`.
+- Motorista: as mesmas cinco rotas sob `/driver/*`.
+- `logout` não leva tag de papel (encerrar sessão válida deve funcionar mesmo após remover o papel).
+- `/driver/me` exige a tag `driver-role`. `/client/me` hoje **não** tem tag — comportamento atual, decisão de domínio pendente.
 
-### Mensageria (RabbitMQ)
-- Publisher: objeto literal implementando interface (não classe)
-- Consumers: self-starting via side-effect import em `messaging/index.ts`
-- Exchange: topic, durable. Queue: durable. Routing keys: dot notation
-- Conexão compartilhada via `infra/messaging/connection.ts`
-- Poison messages (ZodError): nack sem requeue
+## Convenção obrigatória dos endpoints
+- Objeto de opções em **uma linha** quando couber em 120 colunas.
+- Ordem: `expose`, `method`, `path`, `auth`, `sensitive`, `tags`.
+- Callback separado, indentado; não usar `prettier-ignore` para forçar layout.
+- Não adicionar campo `HttpStatus` nas respostas: use o status padrão do Encore (o cadastro responde 200).
 
-## Fluxos Críticos
-
-### Autenticação
-```
-POST /auth/login → UserService.signIn → UserRepository (PG) + SessionStore (Redis+PG) → JWT
-GET  /auth/me    → UserService.getMe  → RedisUserCache → UserRepository (PG)
-```
-
-### Pagamento (Depósito Pix)
-```
-POST /client/wallet/deposit → PaymentService.createDeposit
-  → Asaas.createCustomer + Asaas.createPayment → PaymentRepository (PG)
-POST /webhooks/asaas → PaymentService.processWebhook
-  → PaymentRepository.findWebhookEventByExternalId (idempotência)
-  → PaymentRepository.updateStatus → WalletService.credit → WalletCache.invalidate
+```ts
+export const register = api<ClientRegisterRequest, ClientRegisterResponse>(
+  { expose: true, method: "POST", path: "/client/register", auth: false, sensitive: true },
+  async payload => {
+    const input = validateOrThrow(ClientRegisterSchema, payload);
+    return clientService.register(input);
+  },
+);
 ```
 
-### Wallet
-```
-GET /client/wallet          → WalletService.getWallet → findOrCreateWallet
-GET /client/wallet/balance  → WalletService.getBalance → Cache first, DB fallback
-GET /driver/wallet/transactions → WalletService.getTransactions → WalletTransactionRepository
-POST /driver/wallet/payout  → WalletService.requestPayout → validateOrThrow + debit + WalletCache.invalidate
-```
+## DTOs, validação e mappers
+- Contratos públicos em `src/dto/*.dto.ts` (`Request`/`Response`). Nunca retornar row do banco.
+- Schemas Zod em `src/validations/*.validate.ts`, `strictObject` para rejeitar campos desconhecidos.
+- `validateOrThrow(Schema, data)` devolve o **output** tipado (transforms aplicados); nunca usar casting.
+- Duplicação conhecida e aceita: o endpoint valida o payload público e o service revalida antes de usar. Não crie uma terceira camada.
+- Regras puras de normalização (e-mail, nome, CPF, telefone) ficam em `src/domain/identity/identity.utils.ts`.
+- Enums de domínio (`AccountStatus`, `AuthRole`, `DriverStatus`, documentos) são TypeScript puros e alimentam os `pgEnum`.
 
-### Corrida
-```
-POST /client/rides → UserService.requestRide → RideRequestStore (Redis lock) → RabbitMQ
-POST /driver/offers/:id/accept → DriverService.acceptOffer → RabbitMQ
-PUT  /driver/rides/:id/complete → DriverService.completeRide → RideRepository (PG)
-```
+## Repositórios
+- Nome do contrato **sem prefixo `I`** (`UserRepository`), implementação `DrizzleUserRepository`.
+- Tipos auxiliares em `*.types.ts` (`UserProfile`, `SessionRecord`, `CreateSessionInput`).
+- Filtro de soft delete: `isNull(deletedAt)` em toda query de leitura.
+- Transação: `db.transaction()` quando mais de uma tabela precisa mudar junta.
+- Erros de unicidade são traduzidos no service (`translatePersistenceError`), não no repository.
 
-## Convenções de Nomenclatura
-| Elemento | Padrão | Exemplo |
-|---|---|---|
-| Arquivo | kebab-case | `wallet.service.ts` |
-| Classe | PascalCase | `WalletService` |
-| Singleton | camelCase | `walletService` |
-| Interface (contrato) | `I` + PascalCase | `IWalletRepository` |
-| Row type | PascalCase + `Row` | `WalletRow` |
-| Data type | PascalCase + `Data` | `CreateWalletTransactionData` |
-| DTO input | PascalCase + `DTO` | `RegisterUserDTO` |
-| DTO response | PascalCase + `Response` | `WalletResponse` |
-| Schema Zod | PascalCase + `Schema` | `PayoutSchema` |
-| Cache interface | `I` + PascalCase + `Cache` | `IWalletCache` |
-| Cache key | SCREAMING_SNAKE | `WALLET_BALANCE` |
-| Constante | SCREAMING_SNAKE | `MIN_PAYOUT_AMOUNT_CENTS` |
-| Error message | Português | `"Saldo insuficiente."` |
+## PostgreSQL e Drizzle
+- `.references()` gera **FK real**; `relations.ts` serve apenas para `db.query` relacional (hoje não utilizado). Um não substitui o outro.
+- `driver_profiles` é 1:0..1 com `users` (PK = `user_id`); `driver_documents` referencia `driver_profiles.user_id`.
+- `onDelete: cascade` para dados possuídos pelo usuário; `set null` para referências de revisor.
+- Índices únicos são **parciais** (`WHERE deleted_at IS NULL`) para permitir reutilização de e-mail/CPF após soft delete.
+- Soft delete **não** dispara `ON DELETE`; sessões/documentos devem ser tratados na aplicação.
+- Não crie índice sem uma query que o use. FK **não** cria índice automaticamente.
+- `updatedAt` tem apenas `defaultNow()`: em novos caminhos de update use `$onUpdateFn` ou atualize explicitamente.
+- Enums vêm de arrays do domínio; adicionar valor exige migration.
+- Migrations: `drizzle-kit generate` + `drizzle-kit migrate`. O Encore **não** gerencia este banco (não há `SQLDatabase`), então migrations não são aplicadas sozinhas.
+- Nunca editar migration já aplicada. Nunca usar `db:push`/`db:pull`.
+- Trigger/constraint nova só com regra de negócio comprovada + plano de migration, backfill e rollback.
 
-## Configuração de Ambiente
+## Transações e concorrência
+- Cadastro: `users` + `user_roles` (+ `driver_profiles`) na mesma transação.
+- Refresh é CAS por `id` + hash atual + não revogado + não expirado. Quem perde a corrida recebe 409 sem revogar a sessão.
+- Reutilização de refresh autêntico e obsoleto → revoga a sessão (possível vazamento).
+- Múltiplas sessões por usuário são permitidas (não há unicidade por `user_id`).
+- `SELECT FOR UPDATE` só quando uma invariante real exigir; não use por padrão.
+- Códigos PostgreSQL: `23505` → 409, `23514` → 400, indisponibilidade → 503, resto → 500 sem vazar SQL.
+
+## Segurança
+- Access token JWT HS256 (15 min) com `iss`/`aud`; refresh opaco de 30 dias no formato `sessionId.random.HMAC`.
+- Do banco só sai o SHA-256 do refresh token; o token completo nunca é persistido.
+- Toda requisição autenticada confirma sessão, status da conta e papéis **no PostgreSQL** (sem cache de auth).
+- Endpoints de cadastro/login/refresh/logout/me usam `sensitive: true` (PII fora dos traces).
+- Login usa a mesma mensagem para e-mail inexistente e senha errada.
+- Segredos vêm de `src/config/env.ts`, com mínimo de 32 caracteres.
+- Erros: `APIError` do Encore em português + `details.reason` de `src/constants/error-reasons.ts`.
+
+## Comandos reais
 ```bash
-# Infra
-docker compose up -d
-# Migrations + seed
-npx drizzle-kit migrate
-npm run seed
-# Desenvolvimento
-npm run dev
-```
-
-### Env vars necessárias
-```
-DATABASE_URL          # PostgreSQL
-REDIS_STATE_URL       # Redis
-RABBITMQ_URL          # RabbitMQ
-JWT_SECRET            # Chave JWT
-ASAAS_KEY_SANDBOX     # Asaas API key
-ASAAS_WEBHOOK_TOKEN   # Token webhook Asaas
+docker compose up -d          # PostgreSQL + Redis
+npx drizzle-kit migrate       # aplica migrations
+npm run dev                   # docker + migrate + encore run
+npm run lint                  # eslint src/
+npm run format                # prettier --write
+npm run format:check          # prettier --check
+npm run db:generate           # gera migration a partir do schema
+encore exec -- bun test       # testes (NUNCA `bun test` direto: falta ENCORE_RUNTIME_LIB)
+npx tsc --noEmit              # typecheck
 ```
 
 ## Testes
-- Framework: `bun:test` (`encore exec -- bun test`)
-- Localização: `src/services/__tests__/`
-- Integração (banco real, não mock)
-- Setup: criar dados direto no PG via repository/schema
-- Cleanup: deletar em ordem reversa (respeitar FKs)
-- Prefixo único: `TEST_PREFIX = "test-${Date.now()}"`
+- Arquivos `*.spec.ts` em pastas `__tests__` colocadas por camada (`src/services/__tests__`, `src/auth/__tests__`, etc.).
+- Unitários usam fakes (`src/services/__tests__/fakes.ts`); integração real é `skipIf` sem `TEST_DATABASE_URL`/`TEST_API_URL`.
+- Não há script `seed`. Não execute integração sem banco migrado e descartável.
 
-## Boas Práticas para IA
-1. **Antes de criar algo**, verifique se já existe padrão equivalente no projeto
-2. **Repositories** = sempre criar interface + implementação (ports & adapters)
-3. **Services** = NÃO criar interface, só classe + singleton
-4. **Cache** = SEMPRE invalidar em operações de escrita
-5. **Validação** = SEMPRE dentro do service, nunca no endpoint
-6. **Imports** = tipos de `contracts/`, nunca de `implementations/`
-7. **Errors** = `APIError` do encore.dev, mensagens em português
-8. **Path alias** = `@/` para `./src/*`, `~encore/` para `./encore.gen/*`
-9. **Não use `any`** exceto em fronteiras de infra (JSONB casts)
-10. **Mensagens de erro** = sempre em português, específicas
+## Pendências conhecidas (não implementar por conta própria)
+- `driver_documents` existe no schema, mas ainda não tem repository/endpoint.
+- Redis/ioredis instalados sem consumidores.
+- `/client/me` sem tag de papel (definir se perfil básico é de qualquer autenticado).
+- `updatedAt` não é atualizado automaticamente.
+- Índices atuais precisam de revisão com `EXPLAIN` antes de qualquer remoção/adição.
