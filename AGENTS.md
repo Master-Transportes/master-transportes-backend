@@ -47,6 +47,34 @@ mudam e devem ser descobertos na implementação vigente.
 - Mudanças públicas de API exigem análise dos consumidores e compatibilidade.
 - Não instale dependências nem altere infraestrutura apenas por preferência pessoal.
 
+## Padrões de API (Encore.ts) — obrigatórios
+
+Toda API nova (passageiro, motorista, corrida, administração, suporte) deve seguir
+o padrão detalhado em **`docs/api/padroes-do-projeto.md`** e nos demais arquivos de
+`docs/api/` (endpoints, validação, autenticação, comunicação entre serviços e erros).
+Resumo das regras transversais:
+
+- **Endpoint pequeno:** a API recebe dados, identifica o usuário, valida o contrato
+  e chama o service. Sem regras de negócio no handler nem acesso direto a repositories.
+- **Contrato explícito:** interfaces próprias de request/response em `src/dto/`
+  (nunca linhas do Drizzle) e declaração explícita de `expose`, `method`, `path` e `auth`.
+- **Autorização em duas etapas:** papel via middleware por tag (`client-role`,
+  `driver-role`) e permissão sobre o recurso no service. `passengerId`/`driverId`
+  vêm de `auth.getAuthData()`, nunca do payload. `sensitive: true` onde houver
+  credenciais, sessão ou dados pessoais.
+- **Validação sem duplicação:** Encore para estrutura HTTP, Zod (`validateOrThrow`)
+  para regras e transformações, PostgreSQL para unicidade e integridade. A mesma
+  regra não se repete em três camadas.
+- **Erros:** `APIError` + `details.reason` estável de `src/constants/error-reasons.ts`;
+  mensagens em português; nunca expor SQL, segredos ou dados internos.
+- **Serviços internos tipados:** `~encore/clients` para fronteira real entre serviços
+  Encore; chamada TypeScript direta no mesmo domínio. `api.raw()` só para webhooks
+  e formatos especiais.
+- **Datas:** instantes em ISO 8601 UTC; datas civis em `YYYY-MM-DD` (ver `docs/temporal/`).
+- **Testes por endpoint:** autenticação, autorização (papel e recurso), entrada
+  inválida, sucesso, falhas e concorrência — atualizando a política central de
+  endpoints e seus testes quando uma rota é adicionada ou alterada.
+
 ## Autenticação, autorização e segurança
 
 - Use a identidade autenticada e as políticas de acesso **reais** do projeto. Nunca confie

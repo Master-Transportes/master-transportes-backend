@@ -7,6 +7,7 @@ import {
   text,
   date,
   timestamp,
+  numeric,
   index,
   uniqueIndex,
   primaryKey,
@@ -32,6 +33,21 @@ export const documentVerificationStatusEnum = pgEnum(
   "document_verification_status",
   DRIVER_DOCUMENT_VERIFICATION_STATUSES,
 );
+// Vocabulário de estados definido no próprio schema (fonte do enum PostgreSQL).
+export const rideStatusEnum = pgEnum("ride_status", [
+  "SEARCHING",
+  "ACCEPTED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+]);
+export const rideOfferStatusEnum = pgEnum("ride_offer_status", [
+  "PENDING",
+  "ACCEPTED",
+  "REJECTED",
+  "EXPIRED",
+  "CANCELLED",
+]);
 
 /** Todos os timestamps são timestamptz em UTC (armazenamento independente de fuso). */
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
@@ -191,3 +207,129 @@ export const sessions = pgTable(
 
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// rides — corrida solicitada por um passageiro (histórico permanente, sem soft
+// delete). Coordenadas em numeric(9,6) (precisão ≈ 11 cm), endereço em texto.
+// Timestamps de eventos usam now() do PostgreSQL (autoridade do servidor).
+// ---------------------------------------------------------------------------
+export const rides = pgTable(
+  "rides",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    // FK restrict: preserva histórico mesmo se a conta for removida (o hard
+    // delete de usuário com corridas fica explicitamente bloqueado).
+    passengerId: uuid("passenger_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: rideStatusEnum("status").notNull().default("SEARCHING"),
+    originLat: numeric("origin_lat", { precision: 9, scale: 6 }).notNull(),
+    originLng: numeric("origin_lng", { precision: 9, scale: 6 }).notNull(),
+    originAddress: text("origin_address").notNull(),
+    destinationLat: numeric("destination_lat", { precision: 9, scale: 6 }).notNull(),
+    destinationLng: numeric("destination_lng", { precision: 9, scale: 6 }).notNull(),
+    destinationAddress: text("destination_address").notNull(),
+    // Referencia driver_profiles (não users): garante que todo motorista
+    // atribuído tenha perfil de motorista. Restrict preserva o histórico.
+    driverId: uuid("driver_id").references(() => driverProfiles.userId, { onDelete: "restrict" }),
+    acceptedAt: timestamptz("accepted_at"),
+    startedAt: timestamptz("started_at"),
+    completedAt: timestamptz("completed_at"),
+    cancelledAt: timestamptz("cancelled_at"),
+    cancelledByUserId: uuid("cancelled_by_user_id").references(() => users.id, { onDelete: "restrict" }),
+    cancellationReason: text("cancellation_reason"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+    updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+  },
+  t => [
+    // Despacho/matching: corridas por estado, mais recentes primeiro.
+    index("rides_status_created_idx").on(t.status, t.createdAt),
+    // Histórico do passageiro ("minhas corridas").
+    index("rides_passenger_history_idx").on(t.passengerId, t.createdAt),
+    // Invariante: um motorista tem no máximo UMA corrida ativa
+    // (ACCEPTED ou IN_PROGRESS); também serve à consulta da corrida ativa dele.
+    uniqueIndex("rides_driver_active_unique")
+      .on(t.driverId)
+      .where(sql`status IN ('ACCEPTED', 'IN_PROGRESS')`),
+    check("rides_origin_coords_check", sql`origin_lat BETWEEN -90 AND 90 AND origin_lng BETWEEN -180 AND 180`),
+    check(
+      "rides_destination_coords_check",
+      sql`destination_lat BETWEEN -90 AND 90 AND destination_lng BETWEEN -180 AND 180`,
+    ),
+    check("rides_origin_address_not_blank", sql`length(trim(origin_address)) > 0`),
+    check("rides_destination_address_not_blank", sql`length(trim(destination_address)) > 0`),
+    // Enquanto SEARCHING nenhuma atribuição pode existir.
+    check("rides_searching_no_driver_check", sql`status <> 'SEARCHING' OR driver_id IS NULL`),
+    // Motorista atribuído exige data de aceite.
+    check("rides_driver_requires_accepted_at_check", sql`driver_id IS NULL OR accepted_at IS NOT NULL`),
+    // Datas de evento só existem a partir do estado correspondente.
+    check("rides_accepted_at_state_check", sql`accepted_at IS NULL OR status <> 'SEARCHING'`),
+    check("rides_started_at_state_check", sql`started_at IS NULL OR status IN ('IN_PROGRESS', 'COMPLETED')`),
+    check("rides_completed_at_state_check", sql`completed_at IS NULL OR status = 'COMPLETED'`),
+    check("rides_cancelled_at_state_check", sql`cancelled_at IS NULL OR status = 'CANCELLED'`),
+    // Cancelamento identifica autor e momento.
+    check(
+      "rides_cancelled_identity_check",
+      sql`status <> 'CANCELLED' OR (cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type RideRow = typeof rides.$inferSelect;
+export type NewRide = typeof rides.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// ride_offers — oferta de uma corrida a um motorista elegível (decisão do
+// matching, que é outro módulo). Histórico permanente: rejeitadas, expiradas
+// e canceladas permanecem registradas.
+// ---------------------------------------------------------------------------
+export const rideOffers = pgTable(
+  "ride_offers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    // Cascade: histórico de ofertas não sobrevive à corrida (rides não tem
+    // delete na prática, mas o vínculo estrutural é de propriedade).
+    rideId: uuid("ride_id")
+      .notNull()
+      .references(() => rides.id, { onDelete: "cascade" }),
+    // Referencia driver_profiles: só motoristas com perfil recebem ofertas.
+    driverUserId: uuid("driver_user_id")
+      .notNull()
+      .references(() => driverProfiles.userId, { onDelete: "restrict" }),
+    status: rideOfferStatusEnum("status").notNull().default("PENDING"),
+    offeredAt: timestamptz("offered_at").defaultNow().notNull(),
+    expiresAt: timestamptz("expires_at").notNull(),
+    respondedAt: timestamptz("responded_at"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+    updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+  },
+  t => [
+    // A mesma corrida não pode ter duas ofertas pendentes para o mesmo motorista.
+    uniqueIndex("ride_offers_pending_unique")
+      .on(t.rideId, t.driverUserId)
+      .where(sql`status = 'PENDING'`),
+    // Invariante: apenas UMA oferta aceita por corrida (backstop do aceite atômico).
+    uniqueIndex("ride_offers_accepted_unique")
+      .on(t.rideId)
+      .where(sql`status = 'ACCEPTED'`),
+    // Caixa de entrada do motorista: ofertas pendentes destinadas a ele.
+    index("ride_offers_driver_pending_idx")
+      .on(t.driverUserId)
+      .where(sql`status = 'PENDING'`),
+    // Junção/listagem de ofertas da corrida (FK não cria índice automaticamente).
+    index("ride_offers_ride_idx").on(t.rideId),
+    // Sweep de expiração: ofertas pendentes vencidas.
+    index("ride_offers_expiry_idx")
+      .on(t.expiresAt)
+      .where(sql`status = 'PENDING'`),
+    check("ride_offers_window_check", sql`expires_at > offered_at`),
+    // responded_at existe se e somente se o motorista respondeu (aceite/recusa).
+    check(
+      "ride_offers_response_check",
+      sql`((status IN ('ACCEPTED', 'REJECTED')) = (responded_at IS NOT NULL))`,
+    ),
+  ],
+);
+
+export type RideOfferRow = typeof rideOffers.$inferSelect;
+export type NewRideOffer = typeof rideOffers.$inferInsert;
