@@ -64,7 +64,7 @@ export const me = api<void, ClientMeResponse>(
 - Cliente: `POST /client/register`, `POST /client/login`, `POST /client/refresh`, `POST /client/logout`, `GET /client/me`.
 - Motorista: as mesmas cinco rotas sob `/driver/*`.
 - `logout` não leva tag de papel (encerrar sessão válida deve funcionar mesmo após remover o papel).
-- `/driver/me` exige a tag `driver-role`. `/client/me` hoje **não** tem tag — comportamento atual, decisão de domínio pendente.
+- `/client/me` exige a tag `client-role`; `/driver/me` exige `driver-role`.
 
 ## Convenção obrigatória dos endpoints
 - Objeto de opções em **uma linha** quando couber em 120 colunas.
@@ -81,6 +81,17 @@ export const register = api<ClientRegisterRequest, ClientRegisterResponse>(
   },
 );
 ```
+
+## Autorização (RBAC)
+- **Autenticação** (`auth: true`) é resolvida pelo AuthHandler: JWT + sessão + conta + papéis atuais no PostgreSQL.
+- **Autorização** é feita por middleware seletivo: `middleware({ target: { auth: true, tags: ["..."] } })`, registrado no `new Service(...)` de `src/api/*/encore.service.ts`.
+- Papéis usam `CLIENT` → tag `client-role` e `DRIVER` → tag `driver-role`. O middleware usa `authData.roles` carregado pelo AuthHandler, nunca papéis enviados pelo cliente ou claims não verificadas.
+- Ausência de autenticação → `401 AUTHENTICATION_REQUIRED`; sem o papel → `403 ROLE_NOT_ALLOWED`. Requisição negada nunca chama `next`.
+- Conta com CLIENT + DRIVER acessa ambos. Possuir DRIVER ≠ estar aprovado para operar corridas.
+- `logout` é a exceção deliberada: `auth: true` sem tag, para encerrar sessão válida após perder o papel.
+- Todo endpoint precisa de classificação explícita em `src/auth/endpoint-policy.ts` (`public`, `authenticated`, `client`, `driver`). O teste `src/auth/__tests__/endpoint-policy.spec.ts` compara o mapa com as definições reais e falha se um endpoint novo ficar sem política ou divergir das tags.
+- `target.tags` do Encore usa OR entre tags; não declare múltiplas tags de papel no mesmo endpoint.
+- Docs: [middleware](https://encore.dev/docs/ts/develop/middleware), [auth](https://encore.dev/docs/ts/develop/auth), [errors](https://encore.dev/docs/ts/primitives/errors).
 
 ## DTOs, validação e mappers
 - Contratos públicos em `src/dto/*.dto.ts` (`Request`/`Response`). Nunca retornar row do banco.
@@ -142,12 +153,11 @@ npx tsc --noEmit              # typecheck
 
 ## Testes
 - Arquivos `*.spec.ts` em pastas `__tests__` colocadas por camada (`src/services/__tests__`, `src/auth/__tests__`, etc.).
-- Unitários usam fakes (`src/services/__tests__/fakes.ts`); integração real é `skipIf` sem `TEST_DATABASE_URL`/`TEST_API_URL`.
+- Unitários usam fakes (`src/services/__tests__/fakes.ts`); integração real é `skipIf` sem `TEST_DATABASE_URL`.
 - Não há script `seed`. Não execute integração sem banco migrado e descartável.
 
 ## Pendências conhecidas (não implementar por conta própria)
 - `driver_documents` existe no schema, mas ainda não tem repository/endpoint.
 - Redis/ioredis instalados sem consumidores.
-- `/client/me` sem tag de papel (definir se perfil básico é de qualquer autenticado).
 - `updatedAt` não é atualizado automaticamente.
 - Índices atuais precisam de revisão com `EXPLAIN` antes de qualquer remoção/adição.
