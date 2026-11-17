@@ -1,4 +1,5 @@
 import { APIError } from "encore.dev/api";
+import { ErrorReason } from "@/constants/error-reasons";
 import { normalizeEmail, normalizeFullName } from "@/domain/identity/identity.utils";
 import { hashPassword } from "@/auth/password";
 import type { DriverMeResponse, DriverRegisterRequest, DriverRegisterResponse } from "@/dto/driver.dto";
@@ -14,9 +15,9 @@ export class DriverService {
 
   async register(request: DriverRegisterRequest): Promise<DriverRegisterResponse> {
     const data = validateOrThrow(DriverRegisterSchema, request);
-    const passwordHash = await hashPassword(data.password);
 
     try {
+      const passwordHash = await hashPassword(data.password);
       const profile = await this.driverRepository.createDriverAccount({
         fullName: normalizeFullName(data.fullName),
         email: normalizeEmail(data.email),
@@ -28,8 +29,8 @@ export class DriverService {
       return toDriverRegisterResponse(profile);
     } catch (error) {
       translatePersistenceError(error, {
-        email: "E-mail já está em uso.",
-        cpf: "CPF já está em uso.",
+        conflictMessage: "Não foi possível concluir o cadastro.",
+        conflictReason: ErrorReason.ACCOUNT_ALREADY_EXISTS,
         fallbackInternal: "Não foi possível concluir o cadastro de motorista.",
       });
     }
@@ -39,7 +40,9 @@ export class DriverService {
     try {
       const profile = await this.driverRepository.findProfileByUserId(userId);
       if (!profile) {
-        throw APIError.notFound("Perfil de motorista não encontrado.");
+        throw APIError.notFound("Perfil de motorista não encontrado.").withDetails({
+          reason: ErrorReason.DRIVER_PROFILE_NOT_FOUND,
+        });
       }
       return toDriverMeResponse(profile);
     } catch (error) {

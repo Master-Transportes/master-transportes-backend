@@ -1,4 +1,5 @@
 import { APIError } from "encore.dev/api";
+import { ErrorReason } from "@/constants/error-reasons";
 import { normalizeEmail, normalizeFullName } from "@/domain/identity/identity.utils";
 import { hashPassword } from "@/auth/password";
 import type { ClientMeResponse, ClientRegisterRequest, ClientRegisterResponse } from "@/dto/client.dto";
@@ -14,9 +15,9 @@ export class ClientService {
 
   async register(request: ClientRegisterRequest): Promise<ClientRegisterResponse> {
     const data = validateOrThrow(ClientRegisterSchema, request);
-    const passwordHash = await hashPassword(data.password);
 
     try {
+      const passwordHash = await hashPassword(data.password);
       const profile = await this.userRepository.createClientAccount({
         fullName: normalizeFullName(data.fullName),
         email: normalizeEmail(data.email),
@@ -28,8 +29,8 @@ export class ClientService {
       return toClientRegisterResponse(profile);
     } catch (error) {
       translatePersistenceError(error, {
-        email: "E-mail já está em uso.",
-        cpf: "CPF já está em uso.",
+        conflictMessage: "Não foi possível concluir o cadastro.",
+        conflictReason: ErrorReason.ACCOUNT_ALREADY_EXISTS,
         fallbackInternal: "Não foi possível concluir o cadastro.",
       });
     }
@@ -39,7 +40,7 @@ export class ClientService {
     try {
       const profile = await this.userRepository.findProfileById(userId);
       if (!profile) {
-        throw APIError.notFound("Usuário não encontrado.");
+        throw APIError.notFound("Usuário não encontrado.").withDetails({ reason: ErrorReason.PROFILE_NOT_FOUND });
       }
       return toClientMeResponse(profile);
     } catch (error) {

@@ -1,4 +1,5 @@
 import { APIError } from "encore.dev/api";
+import { ErrorReason } from "@/constants/error-reasons";
 import type { AuthRole } from "@/domain/identity/identity.types";
 import type { AuthData } from "./auth.types";
 
@@ -15,6 +16,8 @@ export function hasRole(authData: AuthData, role: AuthRole): boolean {
  */
 export function requireRole(authData: AuthData, role: AuthRole): void {
   if (!hasRole(authData, role)) {
-    throw APIError.permissionDenied("Você não tem permissão para acessar este recurso.");
+    throw APIError.permissionDenied("Você não tem permissão para acessar este recurso.").withDetails({
+      reason: ErrorReason.ROLE_NOT_ALLOWED,
+    });
   }
 }
