@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
+import { DriverStatus } from "@/domain/driver/driver.types";
 
 /**
  * Testes de integração com PostgreSQL real.
@@ -35,7 +37,7 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
       expect(found?.id).toBe(created.id);
 
       const roles = await userRepository.findRolesByUserId(created.id);
-      expect(roles).toEqual(["CLIENT"]);
+      expect(roles).toEqual([AuthRole.Client]);
 
       const duplicate = await userRepository
         .createClientAccount({
@@ -73,17 +75,17 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
     });
 
     try {
-      expect(created.driverStatus).toBe("PENDING");
-      expect(created.accountStatus).toBe("ACTIVE");
+      expect(created.driverStatus).toBe(DriverStatus.PENDING);
+      expect(created.accountStatus).toBe(AccountStatus.ACTIVE);
 
-      expect(await driverRepository.findStatusByUserId(created.id)).toBe("PENDING");
+      expect(await driverRepository.findStatusByUserId(created.id)).toBe(DriverStatus.PENDING);
 
       const profile = await driverRepository.findProfileByUserId(created.id);
-      expect(profile?.driverStatus).toBe("PENDING");
-      expect(profile?.accountStatus).toBe("ACTIVE");
+      expect(profile?.driverStatus).toBe(DriverStatus.PENDING);
+      expect(profile?.accountStatus).toBe(AccountStatus.ACTIVE);
 
       const roles = await userRepository.findRolesByUserId(created.id);
-      expect(roles).toEqual(["DRIVER"]);
+      expect(roles).toEqual([AuthRole.Driver]);
     } finally {
       await db.delete(users).where(eq(users.id, created.id));
     }

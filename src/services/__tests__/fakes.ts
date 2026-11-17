@@ -15,12 +15,7 @@ import type {
   SessionRecord,
 } from "@/repositories/session/session.types";
 import type { UserRepository } from "@/repositories/user/user.repository";
-import type {
-  CreateClientAccountInput,
-  UserAuth,
-  UserAuthState,
-  UserProfile,
-} from "@/repositories/user/user.types";
+import type { CreateClientAccountInput, UserAuth, UserAuthState, UserProfile } from "@/repositories/user/user.types";
 
 export interface SeedUserInput {
   email: string;
@@ -43,6 +38,7 @@ export class FakeUserRepository implements UserRepository {
   private readonly rolesByUserId = new Map<string, AuthRole[]>();
   private sequence = 0;
   nextCreateError: Error | null = null;
+  nextFindError: Error | null = null;
 
   seed(input: SeedUserInput): FakeUserRecord {
     this.sequence += 1;
@@ -96,6 +92,12 @@ export class FakeUserRepository implements UserRepository {
   }
 
   async findByEmail(email: string): Promise<UserAuth | null> {
+    if (this.nextFindError) {
+      const error = this.nextFindError;
+      this.nextFindError = null;
+      throw error;
+    }
+
     const found = this.users.find(user => user.email === email);
     if (!found) return null;
 
@@ -241,8 +243,18 @@ export class FakeDriverRepository implements DriverRepository {
 
 export class FakeSessionRepository implements SessionRepository {
   private readonly sessions = new Map<string, SessionRecord>();
+  private nextRotateResult: boolean | null = null;
+  nextCreateError: Error | null = null;
+  nextFindError: Error | null = null;
+  nextRotateError: Error | null = null;
 
   async create(input: CreateSessionInput): Promise<void> {
+    if (this.nextCreateError) {
+      const error = this.nextCreateError;
+      this.nextCreateError = null;
+      throw error;
+    }
+
     this.sessions.set(input.id, {
       id: input.id,
       userId: input.userId,
@@ -253,6 +265,12 @@ export class FakeSessionRepository implements SessionRepository {
   }
 
   async findById(sessionId: string): Promise<SessionRecord | null> {
+    if (this.nextFindError) {
+      const error = this.nextFindError;
+      this.nextFindError = null;
+      throw error;
+    }
+
     return this.sessions.get(sessionId) ?? null;
   }
 
@@ -264,6 +282,18 @@ export class FakeSessionRepository implements SessionRepository {
   }
 
   async rotateRefreshToken(input: RotateSessionInput): Promise<boolean> {
+    if (this.nextRotateError) {
+      const error = this.nextRotateError;
+      this.nextRotateError = null;
+      throw error;
+    }
+
+    if (this.nextRotateResult !== null) {
+      const result = this.nextRotateResult;
+      this.nextRotateResult = null;
+      return result;
+    }
+
     const session = this.sessions.get(input.sessionId);
     if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) return false;
     if (session.refreshTokenHash !== input.expectedRefreshTokenHash) return false;
@@ -291,6 +321,11 @@ export class FakeSessionRepository implements SessionRepository {
 
   countSessions(): number {
     return this.sessions.size;
+  }
+
+  /** Auxiliar de teste: força a próxima rotação a perder o CAS. */
+  forceNextRotationConflict(): void {
+    this.nextRotateResult = false;
   }
 
   /** Auxiliar de teste: força a expiração da sessão. */

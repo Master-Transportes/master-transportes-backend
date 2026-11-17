@@ -44,40 +44,32 @@ describe("DriverService.register", () => {
     const { service } = setup();
     await service.register(baseRequest);
 
-    const error = await captureApiError(
-      service.register({ ...baseRequest, cpf: "11144477735" }),
-    );
+    const error = await captureApiError(service.register({ ...baseRequest, cpf: "11144477735" }));
 
     expect(error.code).toBe(ErrCode.AlreadyExists);
-    expect(error.message).toBe("E-mail já está em uso.");
+    expect(error.message).toBe("Não foi possível concluir o cadastro.");
+    expect(error.details).toEqual({ reason: "ACCOUNT_ALREADY_EXISTS" });
   });
 
   it("rejeita CPF duplicado com 409", async () => {
     const { service } = setup();
     await service.register(baseRequest);
 
-    const error = await captureApiError(
-      service.register({ ...baseRequest, email: "outro@example.com" }),
-    );
+    const error = await captureApiError(service.register({ ...baseRequest, email: "outro@example.com" }));
 
     expect(error.code).toBe(ErrCode.AlreadyExists);
-    expect(error.message).toBe("CPF já está em uso.");
+    expect(error.message).toBe("Não foi possível concluir o cadastro.");
+    expect(error.details).toEqual({ reason: "ACCOUNT_ALREADY_EXISTS" });
   });
 
   it("rejeita CPF inválido, telefone inválido e telefone ausente", async () => {
     const { service } = setup();
 
-    const invalidCpf = await captureApiError(
-      service.register({ ...baseRequest, cpf: "123.456.789-00" }),
-    );
-    const invalidPhone = await captureApiError(
-      service.register({ ...baseRequest, phone: "1234" }),
-    );
+    const invalidCpf = await captureApiError(service.register({ ...baseRequest, cpf: "123.456.789-00" }));
+    const invalidPhone = await captureApiError(service.register({ ...baseRequest, phone: "1234" }));
 
     const { phone: _phone, ...withoutPhone } = baseRequest;
-    const missingPhone = await captureApiError(
-      service.register(withoutPhone as typeof baseRequest),
-    );
+    const missingPhone = await captureApiError(service.register(withoutPhone as typeof baseRequest));
 
     expect(invalidCpf.code).toBe(ErrCode.InvalidArgument);
     expect(invalidPhone.code).toBe(ErrCode.InvalidArgument);

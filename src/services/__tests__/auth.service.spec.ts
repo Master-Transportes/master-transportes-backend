@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ErrCode } from "encore.dev/api";
+import { ErrorReason } from "@/constants/error-reasons";
 import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
 import { DriverStatus } from "@/domain/driver/driver.types";
 import { hashPassword } from "@/auth/password";
@@ -24,6 +25,10 @@ function setup() {
   const service = new AuthService(users, drivers, sessions);
 
   return { users, drivers, sessions, service };
+}
+
+function databaseUnavailable(): Error {
+  return Object.assign(new Error("database unavailable"), { code: "08006" });
 }
 
 describe("AuthService.login — passageiro", () => {
@@ -58,6 +63,33 @@ describe("AuthService.login — passageiro", () => {
     expect(wrongPassword.code).toBe(ErrCode.Unauthenticated);
     expect(unknownEmail.code).toBe(ErrCode.Unauthenticated);
     expect(wrongPassword.message).toBe(unknownEmail.message);
+    expect(wrongPassword.details).toEqual({ reason: ErrorReason.INVALID_CREDENTIALS });
+    expect(unknownEmail.details).toEqual({ reason: ErrorReason.INVALID_CREDENTIALS });
+  });
+
+  it("trata falha de banco no login como 503, não como credencial inválida", async () => {
+    const { users, sessions, service } = setup();
+    users.nextFindError = databaseUnavailable();
+
+    const error = await captureApiError(
+      service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client),
+    );
+
+    expect(error.code).toBe(ErrCode.Unavailable);
+    expect(sessions.countSessions()).toBe(0);
+  });
+
+  it("não deixa sessão persistida quando a criação da sessão falha", async () => {
+    const { users, sessions, service } = setup();
+    users.seed({ email: "client@test.com", passwordHash });
+    sessions.nextCreateError = new Error("falha ao criar sessão");
+
+    const error = await captureApiError(
+      service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client),
+    );
+
+    expect(error.code).toBe(ErrCode.Internal);
+    expect(sessions.countSessions()).toBe(0);
   });
 
   it("nega conta BANNED e INACTIVE", async () => {
@@ -74,6 +106,8 @@ describe("AuthService.login — passageiro", () => {
 
     expect(banned.code).toBe(ErrCode.PermissionDenied);
     expect(inactive.code).toBe(ErrCode.PermissionDenied);
+    expect(banned.details).toEqual({ reason: ErrorReason.ACCOUNT_UNAVAILABLE });
+    expect(inactive.details).toEqual({ reason: ErrorReason.ACCOUNT_UNAVAILABLE });
   });
 
   it("nega login de usuário sem o papel exigido", async () => {
@@ -85,6 +119,7 @@ describe("AuthService.login — passageiro", () => {
     );
 
     expect(error.code).toBe(ErrCode.PermissionDenied);
+    expect(error.details).toEqual({ reason: ErrorReason.ROLE_NOT_ALLOWED });
   });
 });
 
@@ -93,17 +128,10 @@ describe("AuthService.login — motorista (política de status)", () => {
     const { users, drivers, service } = setup();
 
     for (const status of [DriverStatus.PENDING, DriverStatus.UNDER_REVIEW, DriverStatus.APPROVED]) {
-      const user = users.seed({
-        email: `${status.toLowerCase()}@test.com`,
-        passwordHash,
-        roles: [AuthRole.Driver],
-      });
+      const user = users.seed({ email: `${status.toLowerCase()}@test.com`, passwordHash, roles: [AuthRole.Driver] });
       drivers.seed({ userId: user.id, email: user.email, status });
 
-      const response = await service.login(
-        { email: user.email, password: PASSWORD },
-        AuthRole.Driver,
-      );
+      const response = await service.login({ email: user.email, password: PASSWORD }, AuthRole.Driver);
 
       expect(response.sessionId).toBeTruthy();
       expect(response.expiresIn).toBe(900);
@@ -114,18 +142,13 @@ describe("AuthService.login — motorista (política de status)", () => {
     const { users, drivers, service } = setup();
 
     for (const status of [DriverStatus.REJECTED, DriverStatus.SUSPENDED]) {
-      const user = users.seed({
-        email: `${status.toLowerCase()}@test.com`,
-        passwordHash,
-        roles: [AuthRole.Driver],
-      });
+      const user = users.seed({ email: `${status.toLowerCase()}@test.com`, passwordHash, roles: [AuthRole.Driver] });
       drivers.seed({ userId: user.id, email: user.email, status });
 
-      const error = await captureApiError(
-        service.login({ email: user.email, password: PASSWORD }, AuthRole.Driver),
-      );
+      const error = await captureApiError(service.login({ email: user.email, password: PASSWORD }, AuthRole.Driver));
 
       expect(error.code).toBe(ErrCode.PermissionDenied);
+      expect(error.details).toEqual({ reason: ErrorReason.DRIVER_PROFILE_UNAVAILABLE });
     }
   });
 
@@ -138,6 +161,7 @@ describe("AuthService.login — motorista (política de status)", () => {
     );
 
     expect(error.code).toBe(ErrCode.PermissionDenied);
+    expect(error.details).toEqual({ reason: ErrorReason.DRIVER_PROFILE_UNAVAILABLE });
   });
 });
 
@@ -163,11 +187,10 @@ describe("AuthService.refresh", () => {
     const login = await service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client);
     await service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client);
 
-    const error = await captureApiError(
-      service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client),
-    );
+    const error = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
 
     expect(error.code).toBe(ErrCode.Unauthenticated);
+    expect(error.details).toEqual({ reason: ErrorReason.REFRESH_REUSE_DETECTED });
     expect(sessions.getSession(login.sessionId)?.revokedAt).not.toBeNull();
   });
 
@@ -191,11 +214,39 @@ describe("AuthService.refresh", () => {
     const login = await service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client);
     sessions.expireSession(login.sessionId);
 
-    const error = await captureApiError(
-      service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client),
-    );
+    const error = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
 
     expect(error.code).toBe(ErrCode.Unauthenticated);
+  });
+
+  it("trata falha de banco no refresh como 503 e não revoga a sessão", async () => {
+    const { users, sessions, service } = setup();
+    users.seed({ email: "client@test.com", passwordHash });
+
+    const login = await service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client);
+    const hashBefore = sessions.getSession(login.sessionId)?.refreshTokenHash;
+    sessions.nextFindError = databaseUnavailable();
+
+    const error = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
+
+    expect(error.code).toBe(ErrCode.Unavailable);
+    expect(sessions.getSession(login.sessionId)?.revokedAt).toBeNull();
+    expect(sessions.getSession(login.sessionId)?.refreshTokenHash).toBe(hashBefore);
+  });
+
+  it("não rotaciona a sessão quando a persistência da rotação falha", async () => {
+    const { users, sessions, service } = setup();
+    users.seed({ email: "client@test.com", passwordHash });
+
+    const login = await service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client);
+    const hashBefore = sessions.getSession(login.sessionId)?.refreshTokenHash;
+    sessions.nextRotateError = databaseUnavailable();
+
+    const error = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
+
+    expect(error.code).toBe(ErrCode.Unavailable);
+    expect(sessions.getSession(login.sessionId)?.revokedAt).toBeNull();
+    expect(sessions.getSession(login.sessionId)?.refreshTokenHash).toBe(hashBefore);
   });
 
   it("rejeita refresh de sessão revogada", async () => {
@@ -205,9 +256,7 @@ describe("AuthService.refresh", () => {
     const login = await service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client);
     await service.logout({ userID: user.id, sessionId: login.sessionId, roles: [AuthRole.Client] });
 
-    const error = await captureApiError(
-      service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client),
-    );
+    const error = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
 
     expect(error.code).toBe(ErrCode.Unauthenticated);
   });
@@ -219,9 +268,7 @@ describe("AuthService.refresh", () => {
     const login = await service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client);
     users.setStatus(user.id, AccountStatus.BANNED);
 
-    const error = await captureApiError(
-      service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client),
-    );
+    const error = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
 
     expect(error.code).toBe(ErrCode.PermissionDenied);
   });
@@ -235,12 +282,27 @@ describe("AuthService.refresh", () => {
     const first = await service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client);
     expect(first.refreshToken).not.toBe(login.refreshToken);
 
-    const second = await captureApiError(
-      service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client),
-    );
+    const second = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
 
     expect(second.code).toBe(ErrCode.Unauthenticated);
     expect(sessions.getSession(login.sessionId)?.revokedAt).not.toBeNull();
+  });
+
+  it("classifica CAS perdido como conflito recuperável e não revoga a sessão", async () => {
+    const { users, sessions, service } = setup();
+    users.seed({ email: "client@test.com", passwordHash });
+
+    const login = await service.login({ email: "client@test.com", password: PASSWORD }, AuthRole.Client);
+    const hashBefore = sessions.getSession(login.sessionId)?.refreshTokenHash;
+
+    sessions.forceNextRotationConflict();
+
+    const error = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
+
+    expect(error.code).toBe(ErrCode.Aborted);
+    expect(error.details).toEqual({ reason: ErrorReason.REFRESH_CONFLICT });
+    expect(sessions.getSession(login.sessionId)?.revokedAt).toBeNull();
+    expect(sessions.getSession(login.sessionId)?.refreshTokenHash).toBe(hashBefore);
   });
 
   it("nega refresh de sessão de motorista sem papel/perfil válido", async () => {
@@ -251,16 +313,13 @@ describe("AuthService.refresh", () => {
     const login = await service.login({ email: user.email, password: PASSWORD }, AuthRole.Driver);
 
     // Cliente tentando renovar sessão de motorista no endpoint de cliente.
-    const wrongScope = await captureApiError(
-      service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client),
-    );
+    const wrongScope = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Client));
     expect(wrongScope.code).toBe(ErrCode.PermissionDenied);
+    expect(wrongScope.details).toEqual({ reason: ErrorReason.ROLE_NOT_ALLOWED });
 
     // Motorista suspenso após login não renova.
     drivers.setStatus(user.id, DriverStatus.SUSPENDED);
-    const suspended = await captureApiError(
-      service.refresh({ refreshToken: login.refreshToken }, AuthRole.Driver),
-    );
+    const suspended = await captureApiError(service.refresh({ refreshToken: login.refreshToken }, AuthRole.Driver));
     expect(suspended.code).toBe(ErrCode.PermissionDenied);
   });
 });

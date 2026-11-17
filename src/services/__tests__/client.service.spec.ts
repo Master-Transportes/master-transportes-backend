@@ -45,32 +45,28 @@ describe("ClientService.register", () => {
     const { service } = setup();
     await service.register(baseRequest);
 
-    const error = await captureApiError(
-      service.register({ ...baseRequest, cpf: "11144477735" }),
-    );
+    const error = await captureApiError(service.register({ ...baseRequest, cpf: "11144477735" }));
 
     expect(error.code).toBe(ErrCode.AlreadyExists);
-    expect(error.message).toBe("E-mail já está em uso.");
+    expect(error.message).toBe("Não foi possível concluir o cadastro.");
+    expect(error.details).toEqual({ reason: "ACCOUNT_ALREADY_EXISTS" });
   });
 
   it("rejeita CPF duplicado com 409", async () => {
     const { service } = setup();
     await service.register(baseRequest);
 
-    const error = await captureApiError(
-      service.register({ ...baseRequest, email: "outra@example.com" }),
-    );
+    const error = await captureApiError(service.register({ ...baseRequest, email: "outra@example.com" }));
 
     expect(error.code).toBe(ErrCode.AlreadyExists);
-    expect(error.message).toBe("CPF já está em uso.");
+    expect(error.message).toBe("Não foi possível concluir o cadastro.");
+    expect(error.details).toEqual({ reason: "ACCOUNT_ALREADY_EXISTS" });
   });
 
   it("rejeita CPF inválido (dígitos verificadores) com 400", async () => {
     const { service } = setup();
 
-    const error = await captureApiError(
-      service.register({ ...baseRequest, cpf: "111.111.111-11" }),
-    );
+    const error = await captureApiError(service.register({ ...baseRequest, cpf: "111.111.111-11" }));
 
     expect(error.code).toBe(ErrCode.InvalidArgument);
   });
@@ -79,9 +75,7 @@ describe("ClientService.register", () => {
     const { service } = setup();
     const { password: _password, ...withoutPassword } = baseRequest;
 
-    const error = await captureApiError(
-      service.register(withoutPassword as typeof baseRequest),
-    );
+    const error = await captureApiError(service.register(withoutPassword as typeof baseRequest));
 
     expect(error.code).toBe(ErrCode.InvalidArgument);
   });
