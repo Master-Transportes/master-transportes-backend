@@ -35,5 +35,4 @@ encore.gen.cue
 
 # Excalidraw diagrams
 *.excalidraw
-client.ts
 
