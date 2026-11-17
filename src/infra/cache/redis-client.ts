@@ -31,10 +31,7 @@ let firstErrorAt: Date | null = null;
 
 export function createRedisClient(): Redis {
   const client = new Redis(REDIS_URL, baseOptions);
-  log.info("Creating Redis client", {
-    component: "redis-client",
-    url: REDIS_URL.replace(/\/\/.*@/, "//***@"),
-  });
+  log.info("Creating Redis client", { component: "redis-client", url: REDIS_URL.replace(/\/\/.*@/, "//***@") });
 
   client.on("error", (err: Error) => {
     errorCount++;

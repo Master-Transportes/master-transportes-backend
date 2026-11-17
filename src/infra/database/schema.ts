@@ -86,10 +86,7 @@ export const userRoles = pgTable(
     role: userRoleEnum("role").notNull(),
     createdAt: timestamptz("created_at").defaultNow().notNull(),
   },
-  t => [
-    primaryKey({ columns: [t.userId, t.role], name: "user_roles_pkey" }),
-    index("user_roles_role_idx").on(t.role),
-  ],
+  t => [primaryKey({ columns: [t.userId, t.role], name: "user_roles_pkey" }), index("user_roles_role_idx").on(t.role)],
 );
 
 export type UserRoleRow = typeof userRoles.$inferSelect;
@@ -154,10 +151,7 @@ export const driverDocuments = pgTable(
       .on(t.driverUserId, t.type)
       .where(sql`deleted_at IS NULL`),
     index("driver_documents_expires_on_idx").on(t.expiresOn),
-    check(
-      "driver_documents_dates_check",
-      sql`expires_on IS NULL OR issued_on IS NULL OR expires_on >= issued_on`,
-    ),
+    check("driver_documents_dates_check", sql`expires_on IS NULL OR issued_on IS NULL OR expires_on >= issued_on`),
     // license_category só é válido para CNH (mantenha em sincronia com DRIVER_DOCUMENT_TYPES).
     check("driver_documents_category_type_check", sql`license_category IS NULL OR type = 'CNH'`),
     // Categorias de CNH válidas: A, B, C, D, E, AC, AD, AE.

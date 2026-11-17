@@ -1,12 +1,7 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { sessions } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
-import type {
-  ActiveSessionRecord,
-  CreateSessionInput,
-  RotateSessionInput,
-  SessionRecord,
-} from "./session.types";
+import type { ActiveSessionRecord, CreateSessionInput, RotateSessionInput, SessionRecord } from "./session.types";
 
 export interface SessionRepository {
   create(input: CreateSessionInput): Promise<void>;
@@ -25,12 +20,14 @@ export interface SessionRepository {
 
 export class DrizzleSessionRepository implements SessionRepository {
   async create(input: CreateSessionInput): Promise<void> {
-    await db.insert(sessions).values({
-      id: input.id,
-      userId: input.userId,
-      refreshTokenHash: input.refreshTokenHash,
-      expiresAt: input.expiresAt,
-    });
+    await db
+      .insert(sessions)
+      .values({
+        id: input.id,
+        userId: input.userId,
+        refreshTokenHash: input.refreshTokenHash,
+        expiresAt: input.expiresAt,
+      });
   }
 
   async findById(sessionId: string): Promise<SessionRecord | null> {
@@ -53,13 +50,7 @@ export class DrizzleSessionRepository implements SessionRepository {
     const [row] = await db
       .select({ id: sessions.id, userId: sessions.userId })
       .from(sessions)
-      .where(
-        and(
-          eq(sessions.id, sessionId),
-          isNull(sessions.revokedAt),
-          gt(sessions.expiresAt, new Date()),
-        ),
-      )
+      .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
       .limit(1);
 
     return row ?? null;
@@ -68,10 +59,7 @@ export class DrizzleSessionRepository implements SessionRepository {
   async rotateRefreshToken(input: RotateSessionInput): Promise<boolean> {
     const [updated] = await db
       .update(sessions)
-      .set({
-        refreshTokenHash: input.newRefreshTokenHash,
-        expiresAt: input.newExpiresAt,
-      })
+      .set({ refreshTokenHash: input.newRefreshTokenHash, expiresAt: input.newExpiresAt })
       .where(
         and(
           eq(sessions.id, input.sessionId),
@@ -89,13 +77,7 @@ export class DrizzleSessionRepository implements SessionRepository {
     const [updated] = await db
       .update(sessions)
       .set({ revokedAt: new Date() })
-      .where(
-        and(
-          eq(sessions.id, sessionId),
-          eq(sessions.userId, userId),
-          isNull(sessions.revokedAt),
-        ),
-      )
+      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt)))
       .returning({ id: sessions.id });
 
     return updated !== undefined;

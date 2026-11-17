@@ -23,18 +23,11 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 }));
 
 export const userRolesRelations = relations(userRoles, ({ one }) => ({
-  user: one(users, {
-    fields: [userRoles.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [userRoles.userId], references: [users.id] }),
 }));
 
 export const driverProfilesRelations = relations(driverProfiles, ({ one, many }) => ({
-  user: one(users, {
-    fields: [driverProfiles.userId],
-    references: [users.id],
-    relationName: "userDriverProfile",
-  }),
+  user: one(users, { fields: [driverProfiles.userId], references: [users.id], relationName: "userDriverProfile" }),
   reviewer: one(users, {
     fields: [driverProfiles.reviewedByUserId],
     references: [users.id],
@@ -44,19 +37,10 @@ export const driverProfilesRelations = relations(driverProfiles, ({ one, many })
 }));
 
 export const driverDocumentsRelations = relations(driverDocuments, ({ one }) => ({
-  driver: one(driverProfiles, {
-    fields: [driverDocuments.driverUserId],
-    references: [driverProfiles.userId],
-  }),
-  reviewer: one(users, {
-    fields: [driverDocuments.reviewedByUserId],
-    references: [users.id],
-  }),
+  driver: one(driverProfiles, { fields: [driverDocuments.driverUserId], references: [driverProfiles.userId] }),
+  reviewer: one(users, { fields: [driverDocuments.reviewedByUserId], references: [users.id] }),
 }));
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
-  user: one(users, {
-    fields: [sessions.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }));

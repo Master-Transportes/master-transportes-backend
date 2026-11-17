@@ -1,10 +1,5 @@
 export { DrizzleUserRepository, userRepository, type UserRepository } from "./user/user.repository";
-export type {
-  CreateClientAccountInput,
-  UserAuth,
-  UserAuthState,
-  UserProfile,
-} from "./user/user.types";
+export type { CreateClientAccountInput, UserAuth, UserAuthState, UserProfile } from "./user/user.types";
 
 export { DrizzleDriverRepository, driverRepository, type DriverRepository } from "./driver/driver.repository";
 export type { CreateDriverAccountInput, DriverProfileWithUser } from "./driver/driver.types";

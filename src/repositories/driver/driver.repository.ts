@@ -37,10 +37,7 @@ export class DrizzleDriverRepository implements DriverRepository {
 
       await tx.insert(userRoles).values({ userId: created.id, role: AuthRole.Driver });
 
-      await tx.insert(driverProfiles).values({
-        userId: created.id,
-        status: DriverStatus.PENDING,
-      });
+      await tx.insert(driverProfiles).values({ userId: created.id, status: DriverStatus.PENDING });
 
       return {
         id: created.id,
@@ -69,13 +66,7 @@ export class DrizzleDriverRepository implements DriverRepository {
       })
       .from(driverProfiles)
       .innerJoin(users, eq(users.id, driverProfiles.userId))
-      .where(
-        and(
-          eq(driverProfiles.userId, userId),
-          isNull(driverProfiles.deletedAt),
-          isNull(users.deletedAt),
-        ),
-      )
+      .where(and(eq(driverProfiles.userId, userId), isNull(driverProfiles.deletedAt), isNull(users.deletedAt)))
       .limit(1);
 
     return row ?? null;

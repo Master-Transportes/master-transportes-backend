@@ -6,5 +6,6 @@
   "trailingComma": "all",
   "bracketSpacing": true,
   "arrowParens": "avoid",
+  "objectWrap": "collapse",
   "endOfLine": "lf"
 }

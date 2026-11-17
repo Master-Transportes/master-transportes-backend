@@ -10,11 +10,7 @@ const passwordSchema = z
 
 const cpfSchema = z.string().trim().transform(normalizeCpf).refine(isValidCpf, "CPF inválido.");
 
-const phoneSchema = z
-  .string()
-  .trim()
-  .transform(normalizePhone)
-  .refine(isValidBrazilianPhone, "Telefone inválido.");
+const phoneSchema = z.string().trim().transform(normalizePhone).refine(isValidBrazilianPhone, "Telefone inválido.");
 
 /**
  * Cadastro público de passageiro. Campos desconhecidos (status, roles, etc.)
