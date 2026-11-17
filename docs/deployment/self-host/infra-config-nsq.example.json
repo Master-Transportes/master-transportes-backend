@@ -1,0 +1,28 @@
+{
+  "$schema": "https://encore.dev/schemas/infra.schema.json",
+  "metadata": {
+    "app_id": "master-transporte",
+    "env_name": "staging",
+    "env_type": "test",
+    "base_url": "https://api.exemplo.com"
+  },
+  "graceful_shutdown": {
+    "total": 30
+  },
+  "pubsub": [
+    {
+      "type": "nsq",
+      "hosts": "nsqd:4150",
+      "topics": {
+        "ride-events": {
+          "name": "ride-events",
+          "subscriptions": {
+            "process-ride-event": {
+              "name": "process-ride-event"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

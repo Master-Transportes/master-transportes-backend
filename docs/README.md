@@ -15,6 +15,7 @@ visão geral, exemplos completos e referências.
 | [`drizzle/`](./drizzle/README.md) | Persistência: Drizzle ORM + Kit, PostgreSQL 18, schema, relações, migrations, conexão, transações e diagnóstico no banco |
 | [`temporal/`](./temporal/README.md) | Política de datas e horários: instantes × datas civis, contrato de API em UTC, filtros por dia local, autoridade dos timestamps e testes de regressão |
 | [`pubsub/`](./pubsub/README.md) | Pub/Sub do Encore: topics e subscribers, garantias de entrega, idempotência, DLQ, Outbox, ordenação, providers e testes |
+| [`deployment/`](./deployment/README.md) | Estratégias de implantação: self-hosting (infra config, build Docker, checklist de segurança); Encore Platform pendente de decisão |
 
 ## Convenções dos documentos
 
