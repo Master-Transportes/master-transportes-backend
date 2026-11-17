@@ -15,6 +15,20 @@
       "when": 1794935487407,
       "tag": "0001_big_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794938750981,
+      "tag": "0002_spotty_lightspeed",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794943924397,
+      "tag": "0003_ride_requests_separation",
+      "breakpoints": true
     }
   ]
 }

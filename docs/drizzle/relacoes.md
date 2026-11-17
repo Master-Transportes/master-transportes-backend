@@ -57,15 +57,20 @@ Ambos convivem no projeto por propósito diferente.
 
 ## ⚠️ Ambiguidade proprietário × revisor
 
-`driver_profiles` e `driver_documents` têm **duas** referências a `users`:
-o proprietário (`userId`) e o revisor (`reviewedByUserId`).
+`driver_profiles` referencia `users` duas vezes: proprietário (`userId`) e revisor
+(`reviewedByUserId`). `driver_documents` referencia `driver_profiles` como dono
+(`driverUserId`) e `users` como revisor (`reviewedByUserId`).
 
 Se ambas forem expostas como relações do ORM, é preciso diferenciá-las com
 **`relationName`**, senão as relações ficam ambíguas (API suportada na linha 0.x).
 
-**Pendente de auditoria:** o conteúdo real de `src/infra/database/relations.ts` não
-foi revisado. Consigo avaliar as FKs, mas não confirmar se as relações declaradas
-para `db.query` estão corretas e sem ambiguidade. Verificar ao tocar nessas tabelas.
+**Revisado:** `src/infra/database/relations.ts` usa `relationName` nas relações
+ambíguas (`userDriverProfile`, `reviewerDriverProfiles`, `passengerRides`,
+`driverRides`, `driverRideOffers` e `cancelledRides`). A relação opcional
+`usersRelations.driverProfile` está declarada com `fields: [users.id]` e
+`references: [driverProfiles.userId]`; no Drizzle 0.45.x, a inferência inclui
+`| null`, coerente com usuários que não possuem perfil de motorista. Não migrar
+para a API de relações 1.0 só por causa disso.
 
 ## ❌ Não migrar para a API v2 preventivamente
 

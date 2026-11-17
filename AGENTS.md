@@ -54,14 +54,19 @@ o padrão detalhado em **`docs/api/padroes-do-projeto.md`** e nos demais arquivo
 `docs/api/` (endpoints, validação, autenticação, comunicação entre serviços e erros).
 Resumo das regras transversais:
 
-- **Endpoint pequeno:** a API recebe dados, identifica o usuário, valida o contrato
-  e chama o service. Sem regras de negócio no handler nem acesso direto a repositories.
+- **Endpoint pequeno:** a API recebe dados, identifica o usuário e chama o service.
+  A validação/transformação Zod fica na entrada do service (`validateOrThrow`); o
+  endpoint não repete o mesmo parse. Sem regras de negócio no handler nem acesso
+  direto a repositories.
 - **Contrato explícito:** interfaces próprias de request/response em `src/dto/`
   (nunca linhas do Drizzle) e declaração explícita de `expose`, `method`, `path` e `auth`.
 - **Autorização em duas etapas:** papel via middleware por tag (`client-role`,
   `driver-role`) e permissão sobre o recurso no service. `passengerId`/`driverId`
   vêm de `auth.getAuthData()`, nunca do payload. `sensitive: true` onde houver
-  credenciais, sessão ou dados pessoais.
+  credenciais, sessão ou dados pessoais. **Papel `DRIVER` não é aprovação
+  operacional**: operações de transporte exigem `driver_profiles.status = APPROVED`
+  e devem declarar `tags: ["driver-role", "driver-operational"]` no guard
+  operacional; `/driver/me` e logout continuam acessíveis para regularização.
 - **Validação sem duplicação:** Encore para estrutura HTTP, Zod (`validateOrThrow`)
   para regras e transformações, PostgreSQL para unicidade e integridade. A mesma
   regra não se repete em três camadas.

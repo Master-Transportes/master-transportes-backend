@@ -3,6 +3,7 @@ import { ErrCode } from "encore.dev/api";
 import { AccountStatus } from "@/domain/identity/identity.types";
 import { DriverStatus } from "@/domain/driver/driver.types";
 import { DriverService } from "@/services/driver.service";
+import { UniqueViolationError } from "@/repositories/database-errors";
 import { FakeDriverRepository } from "./fakes";
 import { captureApiError } from "./test-helpers";
 
@@ -74,6 +75,79 @@ describe("DriverService.register", () => {
     expect(invalidCpf.code).toBe(ErrCode.InvalidArgument);
     expect(invalidPhone.code).toBe(ErrCode.InvalidArgument);
     expect(missingPhone.code).toBe(ErrCode.InvalidArgument);
+  });
+});
+
+describe("DriverService.apply", () => {
+  const applyRequest = { phone: "(92) 99999-0000", cpf: "529.982.247-25" };
+
+  it("adiciona DRIVER a uma identidade existente e retorna o perfil PENDING", async () => {
+    const { drivers, service } = setup();
+    const profile = drivers.seed({ userId: "client-1", email: "cliente@test.com", status: DriverStatus.PENDING });
+    drivers.setNextApplyResult({ status: "created", profile });
+
+    const response = await service.apply("client-1", applyRequest);
+
+    expect(response.id).toBe("client-1");
+    expect(response.phone).toBe("92999990000");
+    expect(response.cpf).toBe("52998224725");
+    expect(response.driverStatus).toBe(DriverStatus.PENDING);
+    expect(response).not.toHaveProperty("passwordHash");
+  });
+
+  it("rejeita identidade que já possui o papel DRIVER", async () => {
+    const { drivers, service } = setup();
+    drivers.setNextApplyResult({ status: "already_driver" });
+
+    const error = await captureApiError(service.apply("client-1", applyRequest));
+
+    expect(error.code).toBe(ErrCode.AlreadyExists);
+    expect(error.details).toEqual({ reason: "DRIVER_PROFILE_ALREADY_EXISTS" });
+  });
+
+  it("retorna 404 quando o usuário autenticado não existe mais", async () => {
+    const { drivers, service } = setup();
+    drivers.setNextApplyResult({ status: "user_not_found" });
+
+    const error = await captureApiError(service.apply("client-1", applyRequest));
+
+    expect(error.code).toBe(ErrCode.NotFound);
+    expect(error.details).toEqual({ reason: "PROFILE_NOT_FOUND" });
+  });
+
+  it("não sobrescreve telefone/CPF divergentes da identidade", async () => {
+    const { drivers, service } = setup();
+    drivers.setNextApplyResult({ status: "identity_conflict", field: "cpf" });
+
+    const error = await captureApiError(service.apply("client-1", applyRequest));
+
+    expect(error.code).toBe(ErrCode.AlreadyExists);
+    expect(error.details).toEqual({ reason: "RESOURCE_CONFLICT" });
+  });
+
+  it("valida CPF/telefone e rejeita campos desconhecidos", async () => {
+    const { service } = setup();
+
+    const invalidCpf = await captureApiError(service.apply("client-1", { ...applyRequest, cpf: "111.111.111-11" }));
+    const invalidPhone = await captureApiError(service.apply("client-1", { ...applyRequest, phone: "1234" }));
+    const unknownField = await captureApiError(
+      service.apply("client-1", { ...applyRequest, role: "ADMIN" } as typeof applyRequest),
+    );
+
+    expect(invalidCpf.code).toBe(ErrCode.InvalidArgument);
+    expect(invalidPhone.code).toBe(ErrCode.InvalidArgument);
+    expect(unknownField.code).toBe(ErrCode.InvalidArgument);
+  });
+
+  it("traduz conflito de unicidade do PostgreSQL sem vazar detalhes", async () => {
+    const { drivers, service } = setup();
+    drivers.nextApplyError = new UniqueViolationError("users_cpf_unique");
+
+    const error = await captureApiError(service.apply("client-1", applyRequest));
+
+    expect(error.code).toBe(ErrCode.AlreadyExists);
+    expect(error.message).toBe("Não foi possível aplicar o papel de motorista.");
+    expect(error.details).toEqual({ reason: "ACCOUNT_ALREADY_EXISTS" });
   });
 });
 

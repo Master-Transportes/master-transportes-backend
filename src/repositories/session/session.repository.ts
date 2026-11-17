@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { sessions } from "@/infra/database/schema";
 import { db } from "@/infra/database/drizzle";
 import type { ActiveSessionRecord, CreateSessionInput, RotateSessionInput, SessionRecord } from "./session.types";
@@ -26,7 +26,7 @@ export class DrizzleSessionRepository implements SessionRepository {
         id: input.id,
         userId: input.userId,
         refreshTokenHash: input.refreshTokenHash,
-        expiresAt: input.expiresAt,
+        expiresAt: sql`now() + ${input.ttlSeconds}::int * interval '1 second'`,
       });
   }
 
@@ -38,6 +38,7 @@ export class DrizzleSessionRepository implements SessionRepository {
         refreshTokenHash: sessions.refreshTokenHash,
         expiresAt: sessions.expiresAt,
         revokedAt: sessions.revokedAt,
+        isExpired: sql<boolean>`${sessions.expiresAt} <= now()`,
       })
       .from(sessions)
       .where(eq(sessions.id, sessionId))
@@ -50,7 +51,7 @@ export class DrizzleSessionRepository implements SessionRepository {
     const [row] = await db
       .select({ id: sessions.id, userId: sessions.userId })
       .from(sessions)
-      .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+      .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt), sql`${sessions.expiresAt} > now()`))
       .limit(1);
 
     return row ?? null;
@@ -59,13 +60,17 @@ export class DrizzleSessionRepository implements SessionRepository {
   async rotateRefreshToken(input: RotateSessionInput): Promise<boolean> {
     const [updated] = await db
       .update(sessions)
-      .set({ refreshTokenHash: input.newRefreshTokenHash, expiresAt: input.newExpiresAt })
+      .set({
+        refreshTokenHash: input.newRefreshTokenHash,
+        expiresAt: sql`now() + ${input.ttlSeconds}::int * interval '1 second'`,
+        updatedAt: sql`now()`,
+      })
       .where(
         and(
           eq(sessions.id, input.sessionId),
           eq(sessions.refreshTokenHash, input.expectedRefreshTokenHash),
           isNull(sessions.revokedAt),
-          gt(sessions.expiresAt, new Date()),
+          sql`${sessions.expiresAt} > now()`,
         ),
       )
       .returning({ id: sessions.id });
@@ -76,7 +81,7 @@ export class DrizzleSessionRepository implements SessionRepository {
   async revoke(sessionId: string, userId: string): Promise<boolean> {
     const [updated] = await db
       .update(sessions)
-      .set({ revokedAt: new Date() })
+      .set({ revokedAt: sql`now()`, updatedAt: sql`now()` })
       .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt)))
       .returning({ id: sessions.id });
 

@@ -5,7 +5,7 @@ import { ErrorReason } from "@/constants/error-reasons";
 import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
 import { DRIVER_LOGIN_ALLOWED_STATUSES } from "@/domain/driver/driver.types";
 import { signAccessToken } from "@/auth/auth";
-import { comparePassword } from "@/auth/password";
+import { comparePassword, DUMMY_PASSWORD_HASH } from "@/auth/password";
 import { generateRefreshToken, hashRefreshToken, parseRefreshToken } from "@/auth/refresh-token";
 import type { AuthData, SessionTokens } from "@/auth/auth.types";
 import type { LoginRequest, LoginResponse, RefreshRequest, RefreshResponse } from "@/dto/auth.dto";
@@ -20,6 +20,9 @@ import { translatePersistenceError } from "./service-errors";
 
 const INVALID_CREDENTIALS_MESSAGE = "E-mail ou senha inválidos.";
 
+/** Ponto de injeção usado em testes para comprovar a comparação de senha. */
+export type PasswordComparer = (plainText: string, storedHash: string) => Promise<boolean>;
+
 /**
  * Regras de autenticação compartilhadas por passageiros e motoristas:
  * login, criação de sessão, refresh com rotação atômica e logout.
@@ -29,6 +32,7 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly driverRepository: DriverRepository,
     private readonly sessionRepository: SessionRepository,
+    private readonly comparePasswordFn: PasswordComparer = comparePassword,
   ) {}
 
   async login(request: LoginRequest, requiredRole: AuthRole): Promise<LoginResponse> {
@@ -36,14 +40,11 @@ export class AuthService {
 
     try {
       const user = await this.userRepository.findByEmail(email);
-      if (!user) {
-        throw APIError.unauthenticated(INVALID_CREDENTIALS_MESSAGE).withDetails({
-          reason: ErrorReason.INVALID_CREDENTIALS,
-        });
-      }
 
-      const passwordMatches = await comparePassword(password, user.passwordHash);
-      if (!passwordMatches) {
+      // Compara sempre, inclusive para e-mail inexistente (hash dummy de mesmo custo),
+      // para reduzir a diferença de tempo observável entre os dois cenários.
+      const passwordMatches = await this.comparePasswordFn(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+      if (!user || !passwordMatches) {
         throw APIError.unauthenticated(INVALID_CREDENTIALS_MESSAGE).withDetails({
           reason: ErrorReason.INVALID_CREDENTIALS,
         });
@@ -92,7 +93,7 @@ export class AuthService {
       if (session.revokedAt) {
         throw APIError.unauthenticated("Sessão revogada.").withDetails({ reason: ErrorReason.SESSION_REVOKED });
       }
-      if (session.expiresAt.getTime() <= Date.now()) {
+      if (session.isExpired) {
         throw APIError.unauthenticated("Sessão expirada.").withDetails({ reason: ErrorReason.SESSION_EXPIRED });
       }
 
@@ -139,7 +140,7 @@ export class AuthService {
         sessionId: session.id,
         expectedRefreshTokenHash: currentHash,
         newRefreshTokenHash: hashRefreshToken(newRefreshToken),
-        newExpiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000),
+        ttlSeconds: REFRESH_TOKEN_TTL_SECONDS,
       });
 
       if (!rotated) {
@@ -181,7 +182,7 @@ export class AuthService {
       id: sessionId,
       userId,
       refreshTokenHash: hashRefreshToken(refreshToken),
-      expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000),
+      ttlSeconds: REFRESH_TOKEN_TTL_SECONDS,
     });
 
     return { accessToken, refreshToken, sessionId, expiresIn: ACCESS_TOKEN_TTL_SECONDS };
@@ -196,7 +197,7 @@ export class AuthService {
     if (latest.revokedAt) {
       throw APIError.unauthenticated("Sessão revogada.").withDetails({ reason: ErrorReason.SESSION_REVOKED });
     }
-    if (latest.expiresAt.getTime() <= Date.now()) {
+    if (latest.isExpired) {
       throw APIError.unauthenticated("Sessão expirada.").withDetails({ reason: ErrorReason.SESSION_EXPIRED });
     }
 

@@ -6,7 +6,12 @@ import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
 import { DriverStatus } from "@/domain/driver/driver.types";
 import { UniqueViolationError } from "@/repositories/database-errors";
 import type { DriverRepository } from "@/repositories/driver/driver.repository";
-import type { CreateDriverAccountInput, DriverProfileWithUser } from "@/repositories/driver/driver.types";
+import type {
+  ApplyDriverRoleInput,
+  ApplyDriverRoleResult,
+  CreateDriverAccountInput,
+  DriverProfileWithUser,
+} from "@/repositories/driver/driver.types";
 import type { SessionRepository } from "@/repositories/session/session.repository";
 import type {
   ActiveSessionRecord,
@@ -152,6 +157,8 @@ export class FakeDriverRepository implements DriverRepository {
   private readonly drivers: FakeDriverRecord[] = [];
   private sequence = 0;
   nextCreateError: Error | null = null;
+  nextApplyResult: ApplyDriverRoleResult | null = null;
+  nextApplyError: Error | null = null;
 
   seed(input: {
     userId?: string;
@@ -208,6 +215,28 @@ export class FakeDriverRepository implements DriverRepository {
     return record;
   }
 
+  async applyDriverRole(input: ApplyDriverRoleInput): Promise<ApplyDriverRoleResult> {
+    if (this.nextApplyError) {
+      const error = this.nextApplyError;
+      this.nextApplyError = null;
+      throw error;
+    }
+
+    if (this.nextApplyResult) {
+      const result = this.nextApplyResult;
+      this.nextApplyResult = null;
+      return result;
+    }
+
+    const found = this.drivers.find(driver => driver.id === input.userId);
+    return found ? { status: "already_driver" } : { status: "user_not_found" };
+  }
+
+  /** Auxiliar de teste: define o próximo resultado da aplicação de papel. */
+  setNextApplyResult(result: ApplyDriverRoleResult): void {
+    this.nextApplyResult = result;
+  }
+
   async findProfileByUserId(userId: string): Promise<DriverProfileWithUser | null> {
     const found = this.drivers.find(driver => driver.id === userId);
     if (!found) return null;
@@ -241,8 +270,10 @@ export class FakeDriverRepository implements DriverRepository {
   }
 }
 
+type StoredSession = Omit<SessionRecord, "isExpired">;
+
 export class FakeSessionRepository implements SessionRepository {
-  private readonly sessions = new Map<string, SessionRecord>();
+  private readonly sessions = new Map<string, StoredSession>();
   private nextRotateResult: boolean | null = null;
   nextCreateError: Error | null = null;
   nextFindError: Error | null = null;
@@ -259,7 +290,7 @@ export class FakeSessionRepository implements SessionRepository {
       id: input.id,
       userId: input.userId,
       refreshTokenHash: input.refreshTokenHash,
-      expiresAt: input.expiresAt,
+      expiresAt: new Date(Date.now() + input.ttlSeconds * 1000),
       revokedAt: null,
     });
   }
@@ -271,7 +302,7 @@ export class FakeSessionRepository implements SessionRepository {
       throw error;
     }
 
-    return this.sessions.get(sessionId) ?? null;
+    return this.toRecord(this.sessions.get(sessionId));
   }
 
   async findActiveById(sessionId: string): Promise<ActiveSessionRecord | null> {
@@ -301,7 +332,7 @@ export class FakeSessionRepository implements SessionRepository {
     this.sessions.set(session.id, {
       ...session,
       refreshTokenHash: input.newRefreshTokenHash,
-      expiresAt: input.newExpiresAt,
+      expiresAt: new Date(Date.now() + input.ttlSeconds * 1000),
     });
 
     return true;
@@ -316,7 +347,12 @@ export class FakeSessionRepository implements SessionRepository {
   }
 
   getSession(sessionId: string): SessionRecord | undefined {
-    return this.sessions.get(sessionId);
+    return this.toRecord(this.sessions.get(sessionId)) ?? undefined;
+  }
+
+  private toRecord(session: StoredSession | undefined): SessionRecord | null {
+    if (!session) return null;
+    return { ...session, isExpired: session.expiresAt.getTime() <= Date.now() };
   }
 
   countSessions(): number {

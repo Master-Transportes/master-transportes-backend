@@ -24,6 +24,11 @@ import { APIError } from "encore.dev/api";
 throw APIError.permissionDenied("Você não tem permissão para acessar esta corrida");
 ```
 
+**401 × 403 no fluxo de identidade:** o AuthHandler usa 401 quando token, sessão
+ou conta não formam uma identidade válida para a requisição. Depois que login ou
+refresh provam a credencial, conta indisponível, papel ausente ou motorista sem
+elegibilidade são 403. Não unificar os dois casos: a fase do fluxo é diferente.
+
 ## `withDetails` e `ErrorReason`
 
 Para classificação de domínio, anexe um `reason` estável:
@@ -39,8 +44,8 @@ throw APIError.permissionDenied("Operação não permitida.").withDetails({
 
 `ErrorReason` (`src/constants/error-reasons.ts`) concentra os códigos de contrato
 (`ACCOUNT_ALREADY_EXISTS`, `INVALID_CREDENTIALS`, `SESSION_EXPIRED`,
-`ROLE_NOT_ALLOWED`, `SERVICE_UNAVAILABLE`, etc.). São códigos estáveis para a UI,
-**não mensagens de exibição**.
+`ROLE_NOT_ALLOWED`, `DATA_INTEGRITY_VIOLATION`, `SERVICE_UNAVAILABLE`, etc.).
+São códigos estáveis para a UI, **não mensagens de exibição**.
 
 ## Padrões do projeto
 
@@ -60,13 +65,18 @@ throw APIError.permissionDenied("Operação não permitida.").withDetails({
 2. **Falhas de persistência** são traduzidas por `translatePersistenceError`
    (`src/services/service-errors.ts`):
 
-   | Falha                          | Resultado                                    |
-   | ------------------------------- | --------------------------------------------- |
-   | Unicidade (23505)               | 409 `already_exists` + `details.reason`       |
-   | Banco indisponível              | 503 `unavailable` + `SERVICE_UNAVAILABLE`     |
-   | CHECK violation (23514)         | 400 `invalid_argument`                        |
-   | `APIError` já intencional       | relançado sem alteração                       |
-   | Demais falhas                   | 500 `internal` sem detalhes sensíveis         |
+   | Falha                          | Resultado                                                    |
+   | ------------------------------- | ------------------------------------------------------------- |
+   | Unicidade (23505)               | 409 `already_exists` + `details.reason`                       |
+   | Banco indisponível              | 503 `unavailable` + `SERVICE_UNAVAILABLE`                     |
+   | CHECK violation (23514)         | 500 `internal` + `DATA_INTEGRITY_VIOLATION`                   |
+   | `APIError` já intencional       | relançado sem alteração                                       |
+   | Demais falhas                   | 500 `internal` sem detalhes sensíveis                         |
+
+   > CHECK é a última barreira de invariantes do banco. Não classificar
+   > automaticamente como 400: a validação de entrada (Zod) já deveria ter
+   > coberto o caso; se o CHECK disparou, houve falha de integridade/domínio.
+   > O log registra apenas código e constraint, nunca SQL/parâmetros.
 
 3. **Nunca exponha** SQL, mensagens do driver, hashes, tokens ou dados pessoais
    em logs, traces e respostas. O log de persistência registra apenas código de

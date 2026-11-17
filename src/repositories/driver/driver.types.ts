@@ -9,6 +9,23 @@ export interface CreateDriverAccountInput {
   cpf: string;
 }
 
+export interface ApplyDriverRoleInput {
+  userId: string;
+  phone: string;
+  cpf: string;
+}
+
+/**
+ * Resultado explícito da aplicação de papel DRIVER a uma identidade existente.
+ * Mantém a decisão de domínio fora do repository (sem HTTP/APIError).
+ */
+export type ApplyDriverRoleResult =
+  | { status: "created"; profile: DriverProfileWithUser }
+  | { status: "already_driver" }
+  | { status: "profile_conflict" }
+  | { status: "user_not_found" }
+  | { status: "identity_conflict"; field: "phone" | "cpf" };
+
 /** Identidade (users) + estado do perfil de motorista (driver_profiles). */
 export interface DriverProfileWithUser {
   id: string;

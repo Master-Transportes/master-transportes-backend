@@ -27,15 +27,12 @@ Combina dois recursos oficiais do PostgreSQL (índice por **expressão** + índi
 1. `lower(email)` impede duplicidade que diferencie apenas maiúsculas/minúsculas.
 2. `WHERE deleted_at IS NULL` permite **reutilizar** o e-mail após soft delete.
 
-**Correção de comentário:** o índice **não** verifica `status = ACTIVE`; verifica
-somente `deleted_at IS NULL`. Comentar como:
-
-```
-// E-mail único entre usuários não excluídos,
-// independentemente de maiúsculas/minúsculas.
-```
-
-Não mudar o índice — apenas o comentário.
+**Comentário corrigido no schema:** o índice **não** verifica `status = ACTIVE`;
+verifica somente `deleted_at IS NULL`. O comentário atual em `schema.ts` reflete
+“usuários não excluídos, sem distinção de maiúsculas/minúsculas”. O índice não foi
+alterado: uma conta `INACTIVE`/`BANNED` continua bloqueando a reutilização do
+e-mail até ser logicamente excluída. Mudar isso exigiria uma decisão de produto
+sobre reaproveitamento de identidade.
 
 ### CPF: `varchar(11)`
 
@@ -83,8 +80,10 @@ updatedAt: timestamptz("updated_at")
 Funciona nas operações **via ORM**; não instala mecanismo no PostgreSQL para escritas
 externas.
 
-> Não aplicar as duas indiscriminadamente. Primeiro auditar como os repositórios
-> atuais atualizam esses campos (prioridade **alta** na auditoria).
+> Não aplicar as duas indiscriminadamente. O padrão adotado é explícito no
+> repository (`updatedAt: sql\`now()\``), já aplicado em rotação/revogação de
+> sessão. Updates futuros de usuário/perfil/documento/corrida devem seguir o
+> mesmo padrão.
 
 ## 2. `user_roles` — múltiplos papéis
 
@@ -174,3 +173,35 @@ Ação: **não remover sem evidência**. Investigar código + plano de execuçã
 
 > O PostgreSQL cria índices para PKs e constraints de unicidade, mas **não** cria
 > automaticamente índices para todas as colunas de FK.
+
+## 6. `rides` — corridas (camada funcional inicial)
+
+- `passenger_id` → `users` com `ON DELETE restrict`: preserva histórico.
+- `driver_id` → `driver_profiles` com `restrict`: não aceita motorista sem perfil.
+- `rides_driver_active_unique` (`driver_id` parcial em `ACCEPTED`/`IN_PROGRESS`):
+  impede duas corridas ativas para o mesmo motorista.
+- Invariantes de estado adicionadas na migration `0002`:
+  - `SEARCHING`: sem motorista e sem nenhum timestamp de evento.
+  - `ACCEPTED`: motorista + `accepted_at`; sem início/conclusão/cancelamento.
+  - `IN_PROGRESS`: motorista + `accepted_at` + `started_at`.
+  - `COMPLETED`: motorista + `accepted_at` + `started_at` + `completed_at`.
+  - `CANCELLED`: `cancelled_at` + `cancelled_by_user_id`, sem `completed_at`;
+    **preserva** `accepted_at`/`started_at` quando o cancelamento ocorre depois
+    dessas etapas.
+  - Cronologia: `accepted_at <= started_at <= completed_at` e
+    `cancelled_at >= accepted_at/started_at` quando aplicável.
+- A migration `0002` substitui as constraints antigas (incluindo a que impedia
+  `started_at` em `CANCELLED`). Não editar `0001` já aplicada.
+
+## 7. `ride_offers` — ofertas (camada funcional inicial)
+
+- `ride_id` → `rides` com cascade; `driver_user_id` → `driver_profiles` com restrict.
+- `ride_offers_pending_unique`: uma oferta pendente por corrida/motorista.
+- `ride_offers_accepted_unique`: no máximo uma oferta aceita por corrida.
+- `ride_offers_response_check`: `responded_at` existe apenas em `ACCEPTED`/`REJECTED`.
+- `ride_offers_window_check`: `expires_at > offered_at`.
+- **Lacuna conhecida:** o banco não consegue garantir, apenas com CHECK, que o
+  motorista da oferta `ACCEPTED` seja o mesmo `rides.driver_id`, nem impedir aceitar
+  oferta expirada (CHECK não pode usar `now()`). Isso exige a operação transacional
+  de aceite; enquanto ela não existir, não há contrato HTTP de corridas para
+  implementá-la.

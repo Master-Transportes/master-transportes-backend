@@ -20,6 +20,12 @@ export interface DriverRegisterResponse {
   createdAt: string;
 }
 
+/** Aplicação de papel DRIVER a uma identidade CLIENT já autenticada. */
+export interface DriverApplyRequest {
+  phone: string;
+  cpf: string;
+}
+
 export interface DriverMeResponse {
   id: string;
   fullName: string;

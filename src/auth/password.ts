@@ -3,6 +3,12 @@ import log from "encore.dev/log";
 import { BCRYPT_COST, PASSWORD_MAX_BYTES } from "@/constants/auth";
 
 /**
+ * Hash bcrypt pré-computado (cost 12) usado apenas para equalizar o custo do login
+ * quando o e-mail não existe. Nunca corresponde a uma senha real do sistema.
+ */
+export const DUMMY_PASSWORD_HASH = "$2b$12$CrLwnlECSqvyemX.BG7fqeHz3KvHf5XBj9Fka7qwD.mD3W.lPrpJm";
+
+/**
  * Gera hash bcrypt. O limite de 72 bytes do bcrypt é rejeitado aqui como
  * defesa em profundidade (a validação de entrada já garante o limite).
  */
@@ -20,6 +26,10 @@ export async function hashPassword(plainText: string): Promise<string> {
  * não correspondência (nunca elevam para 401 com detalhes internos).
  */
 export async function comparePassword(plainText: string, storedHash: string): Promise<boolean> {
+  // Defesa em profundidade: o bcrypt ignora bytes acima de 72. Rejeitar aqui evita
+  // que um sufixo após o 72º byte seja aceito silenciosamente no login.
+  if (Buffer.byteLength(plainText, "utf8") > PASSWORD_MAX_BYTES) return false;
+
   try {
     return await compare(plainText, storedHash);
   } catch (error) {

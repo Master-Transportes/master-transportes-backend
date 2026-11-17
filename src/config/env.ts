@@ -52,3 +52,24 @@ export function getRefreshTokenSecret(): string {
   }
   return value;
 }
+
+/**
+ * Valida o par de segredos de autenticação sem expor os valores.
+ * JWT e refresh token precisam de segredos distintos e suficientemente longos.
+ */
+export function validateAuthSecretPair(jwtSecret: string, refreshSecret: string): void {
+  if (jwtSecret.length < MIN_SECRET_LENGTH) {
+    throw new Error(`JWT_SECRET deve ter ao menos ${MIN_SECRET_LENGTH} caracteres.`);
+  }
+  if (refreshSecret.length < MIN_SECRET_LENGTH) {
+    throw new Error(`REFRESH_TOKEN_SECRET deve ter ao menos ${MIN_SECRET_LENGTH} caracteres.`);
+  }
+  if (jwtSecret === refreshSecret) {
+    throw new Error("JWT_SECRET e REFRESH_TOKEN_SECRET devem ser diferentes.");
+  }
+}
+
+/** Validação de inicialização do processo. Não registra os valores. */
+export function assertAuthSecretsDistinct(): void {
+  validateAuthSecretPair(getJwtSecret(), getRefreshTokenSecret());
+}

@@ -58,7 +58,8 @@ Não é necessário criar um arquivo de configuração para cada tabela.
 - ❌ **Nunca usar `drizzle-kit push` / `pull`** como estratégia. O projeto tem
   histórico versionado; `generate` + revisão + `migrate` é o fluxo controlado.
   Há também relatos de problemas de introspecção de índices em versões do Kit,
-  reforçando a importância da revisão manual.
+  reforçando a importância da revisão manual. Os scripts `db:push`/`db:pull`
+  foram removidos do `package.json`.
 - ⚠️ **O Encore não aplica estas migrations automaticamente.** Este banco é externo
   ao Encore (Docker próprio). `npm run dev` executa `drizzle-kit migrate`; fora dele,
   verificar o estado do banco antes de rodar o backend.

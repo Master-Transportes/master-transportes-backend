@@ -5,7 +5,7 @@ import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
 import { DriverStatus } from "@/domain/driver/driver.types";
 import { hashPassword } from "@/auth/password";
 import { hashRefreshToken } from "@/auth/refresh-token";
-import { AuthService } from "@/services/auth.service";
+import { AuthService, type PasswordComparer } from "@/services/auth.service";
 import { FakeDriverRepository, FakeSessionRepository, FakeUserRepository } from "./fakes";
 import { captureApiError, setTestSecrets } from "./test-helpers";
 
@@ -18,11 +18,11 @@ beforeAll(async () => {
   passwordHash = await hashPassword(PASSWORD);
 });
 
-function setup() {
+function setup(comparePasswordFn?: PasswordComparer) {
   const users = new FakeUserRepository();
   const drivers = new FakeDriverRepository();
   const sessions = new FakeSessionRepository();
-  const service = new AuthService(users, drivers, sessions);
+  const service = new AuthService(users, drivers, sessions, comparePasswordFn);
 
   return { users, drivers, sessions, service };
 }
@@ -65,6 +65,23 @@ describe("AuthService.login — passageiro", () => {
     expect(wrongPassword.message).toBe(unknownEmail.message);
     expect(wrongPassword.details).toEqual({ reason: ErrorReason.INVALID_CREDENTIALS });
     expect(unknownEmail.details).toEqual({ reason: ErrorReason.INVALID_CREDENTIALS });
+  });
+
+  it("compara a senha mesmo quando o e-mail não existe (mitigação de enumeração)", async () => {
+    const calls: Array<{ password: string; storedHash: string }> = [];
+    const { service } = setup(async (password, storedHash) => {
+      calls.push({ password, storedHash });
+      return false;
+    });
+
+    const error = await captureApiError(
+      service.login({ email: "ninguem@test.com", password: PASSWORD }, AuthRole.Client),
+    );
+
+    expect(error.code).toBe(ErrCode.Unauthenticated);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].password).toBe(PASSWORD);
+    expect(calls[0].storedHash.startsWith("$2b$12$")).toBe(true);
   });
 
   it("trata falha de banco no login como 503, não como credencial inválida", async () => {

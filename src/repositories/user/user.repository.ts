@@ -81,7 +81,12 @@ export class DrizzleUserRepository implements UserRepository {
   }
 
   async findRolesByUserId(userId: string): Promise<AuthRole[]> {
-    const rows = await db.select({ role: userRoles.role }).from(userRoles).where(eq(userRoles.userId, userId));
+    const rows = await db
+      .select({ role: userRoles.role })
+      .from(userRoles)
+      .innerJoin(users, eq(users.id, userRoles.userId))
+      .where(and(eq(userRoles.userId, userId), isNull(users.deletedAt)))
+      .orderBy(userRoles.role);
 
     return rows.map(row => row.role);
   }

@@ -1,6 +1,7 @@
 import Redis from "ioredis";
 import log from "encore.dev/log";
 import { getRedisPassword, getRedisUrl } from "@/config/env";
+import { redactRedisUrl } from "./redis-url";
 
 const REDIS_URL = getRedisUrl();
 const REDIS_PASSWORD = getRedisPassword();
@@ -31,7 +32,7 @@ let firstErrorAt: Date | null = null;
 
 export function createRedisClient(): Redis {
   const client = new Redis(REDIS_URL, baseOptions);
-  log.info("Creating Redis client", { component: "redis-client", url: REDIS_URL.replace(/\/\/.*@/, "//***@") });
+  log.info("Creating Redis client", { component: "redis-client", url: redactRedisUrl(REDIS_URL) });
 
   client.on("error", (err: Error) => {
     errorCount++;

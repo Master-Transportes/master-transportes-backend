@@ -1,8 +1,8 @@
 {
-  "name": "encore-ts-starter",
+  "name": "master-transporte-backend",
   "private": true,
   "version": "0.0.1",
-  "description": "Encore Typescript Starter",
+  "description": "Backend do Master Transporte (Encore.ts + PostgreSQL)",
   "license": "MPL-2.0",
   "type": "module",
   "scripts": {
@@ -14,9 +14,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
-    "db:pull": "drizzle-kit pull",
     "db:studio": "drizzle-kit studio"
   },
   "devDependencies": {

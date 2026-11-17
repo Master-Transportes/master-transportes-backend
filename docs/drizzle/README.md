@@ -49,7 +49,7 @@ e `timestamptz` corretos. Nada exige recriar tabelas ou trocar de ORM.
 
 | Prioridade | Ponto | Ação |
 |---|---|---|
-| Alta | `updatedAt` | `defaultNow()` só vale no INSERT; auditar updates (opções: valor explícito no repository ou `$onUpdateFn`) |
+| Alta | `updatedAt` | `defaultNow()` só vale no INSERT. Sessões agora atualizam `updated_at` explicitamente; demais updates devem seguir o mesmo padrão. |
 | Alta | Migrations reais | Conferir SQL aplicado, constraints e índices no PostgreSQL real |
 | Alta | Fluxos integros | Confirmar que cadastro/alterações relacionadas são transacionais |
 | Média | `relations.ts` | Auditar ambiguidade proprietário × revisor (ver `relacoes.md`) |

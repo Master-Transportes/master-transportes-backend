@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { APIError, ErrCode } from "encore.dev/api";
+import { ErrorReason } from "@/constants/error-reasons";
 import { AuthRole } from "@/domain/identity/identity.types";
-import { hasRole, requireRole } from "@/auth/authorization";
+import { hasRole, requireAuthData, requireRole } from "@/auth/authorization";
 import type { AuthData } from "@/auth/auth.types";
 
 function authWith(roles: AuthRole[]): AuthData {
@@ -16,6 +17,21 @@ function catchError(run: () => void): APIError | null {
     return error instanceof APIError ? error : null;
   }
 }
+
+describe("requireAuthData", () => {
+  it("retorna o AuthData existente", () => {
+    const authData = authWith([AuthRole.Client]);
+    expect(requireAuthData(authData)).toBe(authData);
+  });
+
+  it("retorna 401 AUTHENTICATION_REQUIRED quando o contexto é nulo", () => {
+    const error = catchError(() => requireAuthData(null));
+
+    expect(error).toBeInstanceOf(APIError);
+    expect(error?.code).toBe(ErrCode.Unauthenticated);
+    expect(error?.details).toEqual({ reason: ErrorReason.AUTHENTICATION_REQUIRED });
+  });
+});
 
 describe("requireRole", () => {
   it("permite quando o papel efetivo está presente", () => {

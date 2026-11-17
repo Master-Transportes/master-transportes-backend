@@ -74,7 +74,12 @@ Assim, uma falha do WebSocket **não compromete a consistência da corrida**.
 
 ## Adaptação a este projeto
 
-Este repositório atualmente contém **apenas identidade e autenticação** — corridas,
-despacho e localização **não existem e não devem ser criados por suposição** (ver
-`AGENTS.md`). Este documento é referência de arquitetura para quando esses domínios
-forem de fato implementados.
+Este repositório contém **identidade/autenticação implementadas** e o **modelo
+PostgreSQL completo** (`ride_requests`, `rides`, `ride_offers`, migrations e teste
+de constraints — ver [`../drizzle/schema.md`](../drizzle/schema.md)). A camada
+REST de corridas (solicitação, ofertas, aceite e recusa) foi **removida** nesta
+etapa e será reconstruída depois sobre despacho orientado a eventos, respeitando
+a distinção entre solicitação e corrida confirmada (ver
+[`../api/corridas.md`](../api/corridas.md)). **Ainda não** existem matching
+geográfico, despacho automático, streaming, GPS, Pub/Sub ou Outbox. Este documento
+continua sendo a referência de arquitetura para essas próximas etapas.

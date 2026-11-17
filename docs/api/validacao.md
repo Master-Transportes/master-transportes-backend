@@ -48,19 +48,23 @@ O projeto usa Zod via `src/validations/` e o helper `validateOrThrow`
 | Autorização para acessar um recurso       | Middleware (papel) + Service (recurso) |
 
 ```ts
-// Padrão real em uso (src/api/client/client.ts)
+// Endpoint: apenas delega (src/api/client/client.ts)
 export const register = api<ClientRegisterRequest, ClientRegisterResponse>(
   { expose: true, method: "POST", path: "/client/register", auth: false, sensitive: true },
-  async payload => {
-    const input = validateOrThrow(ClientRegisterSchema, payload);
-    return clientService.register(input);
-  },
+  async payload => clientService.register(payload),
 );
+
+// Service: fronteira única de validação/transformação (src/services/client.service.ts)
+async register(request: ClientRegisterRequest): Promise<ClientRegisterResponse> {
+  const data = validateOrThrow(ClientRegisterSchema, request);
+  // ...
+}
 ```
 
 Detalhe do `validateOrThrow`: ele retorna o **tipo de saída** do schema
-(`z.output<S>`), ou seja, o dado **após transforms** — o service recebe o valor
-normalizado, não o bruto.
+(`z.output<S>`), ou seja, o dado **após transforms**. A validação fica no service
+porque ele também é chamado diretamente pelos testes e pode ser reutilizado por
+outro caminho interno; o endpoint não repete o mesmo parse.
 
 ## Regras práticas
 
@@ -71,6 +75,6 @@ normalizado, não o bruto.
 3. Falhas de persistência (unicidade, CHECK, banco indisponível) não são validação
    de entrada: são tratadas no service via `translatePersistenceError`
    (`src/services/service-errors.ts`). Ver [`erros.md`](./erros.md).
-4. **Ponto de auditoria pendente no projeto**: mapear quais validações hoje são
-   necessárias nas duas fronteiras (Encore e Zod) e quais estão apenas sendo
-   repetidas — possível simplificação dos endpoints novos sem perda de segurança.
+4. **Fronteira adotada**: o endpoint não chama o schema de novo; o service valida
+   na entrada. Encore continua validando a estrutura HTTP e o runtime não valida
+   respostas — mappers e testes cobrem a saída.

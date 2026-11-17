@@ -38,8 +38,9 @@ Responsabilidades distintas:
 > identificadores aceitos.
 
 **No DTO público, o campo continua `string`.** O `Date` transformado pertence ao
-processamento interno, não ao contrato JSON. A regra do projeto de duplicação
-(endpoint valida, service revalida) vale aqui — não criar terceira camada.
+processamento interno, não ao contrato JSON. A fronteira de validação é o **service**
+(`validateOrThrow` no início do método); o endpoint só delega. Não rodar o mesmo
+schema duas vezes no caminho normal.
 
 ## Mappers: converter para ISO UTC na saída
 

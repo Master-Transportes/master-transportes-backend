@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { comparePassword, hashPassword } from "@/auth/password";
+import { comparePassword, DUMMY_PASSWORD_HASH, hashPassword } from "@/auth/password";
 
 const PASSWORD = "Str0ng#Passw0rd";
 let storedHash = "";
@@ -31,5 +31,14 @@ describe("password", () => {
 
   it("não quebra quando o hash armazenado é inválido (trata como não correspondência)", async () => {
     await expect(comparePassword(PASSWORD, "hash-invalido")).resolves.toBe(false);
+  });
+
+  it("rejeita entrada acima de 72 bytes antes de chamar o bcrypt", async () => {
+    await expect(comparePassword(`${PASSWORD}${"x".repeat(80)}`, storedHash)).resolves.toBe(false);
+  });
+
+  it("mantém um hash dummy válido com o mesmo custo do bcrypt", async () => {
+    expect(DUMMY_PASSWORD_HASH.startsWith("$2b$12$")).toBe(true);
+    await expect(comparePassword(PASSWORD, DUMMY_PASSWORD_HASH)).resolves.toBe(false);
   });
 });

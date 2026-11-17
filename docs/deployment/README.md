@@ -9,7 +9,7 @@ receber os modelos conforme eles forem avaliados:
 
 | Pasta | Estratégia | Status |
 |---|---|---|
-| [`self-host/`](./self-host/) | Self-hosting (imagem Docker em infraestrutura própria) | Documentado — referência de estudo, não configurado |
+| [`self-host/`](./self-host/) | Self-hosting (imagem Docker em infraestrutura própria) | Documentado — `nsqd` já existe no Compose local; `infra-config.json` de produção ainda não ativado |
 | `encore-platform.md` (futuro) | Encore Platform (AWS/GCP gerenciado) | Não documentado — criar quando o modelo for avaliado |
 
 ## Conteúdo atual

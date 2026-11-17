@@ -40,9 +40,10 @@ Pressupostos: `input` já validado, hash de senha gerado com segurança,
 Se qualquer insert falhar, a transação desfaz os anteriores — o banco nunca fica com
 um usuário sem papel ou sem perfil.
 
-> **Nota:** no projeto, a transação vive no **service**, que orquestra via
-> repositories (ver `AGENTS.md` — service traduz erro de persistência; repository
-> é o único lugar com SQL/Drizzle).
+> **Nota:** no projeto, a transação vive no **repository**, que é o único lugar
+> com SQL/Drizzle. O service orquestra regras e traduz erros de persistência; não
+> abre transação diretamente. Exemplos: `createClientAccount`, `createDriverAccount`
+> e `applyDriverRole` em `src/repositories/`.
 
 ## `SELECT FOR UPDATE`: só quando a invariante exigir
 

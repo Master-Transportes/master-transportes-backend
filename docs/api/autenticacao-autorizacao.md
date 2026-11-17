@@ -16,18 +16,30 @@ Service ..................... verifica permissão sobre o recurso específico
 ## AuthHandler e `getAuthData()`
 
 Endpoints com `auth: true` passam pelo AuthHandler antes do handler. O dado de
-autenticação fica disponível via `auth.getAuthData()`:
+autenticação fica disponível via `auth.getAuthData()`; use `requireAuthData()` para
+transformar a ausência de contexto em 401 explícito, em vez de `!`:
 
 ```ts
 // Padrão real em uso (src/api/client/client.ts)
 export const me = api<void, ClientMeResponse>(
   { expose: true, method: "GET", path: "/client/me", auth: true, sensitive: true, tags: ["client-role"] },
   async () => {
-    const { userID } = auth.getAuthData()!;
+    const { userID } = requireAuthData(auth.getAuthData());
     return clientService.getMe(userID);
   },
 );
 ```
+
+**Login/refresh são públicos (`auth: false`) e não passam pelo middleware de papel.**
+Por isso eles recebem `AuthRole.Client`/`AuthRole.Driver` no service: o parâmetro
+define o escopo do endpoint de entrada e, no caso de motorista, também revalida o
+perfil. Não remover essa regra como se fosse redundante.
+
+**Elegibilidade operacional é diferente de papel.** `DRIVER` autentica e acessa
+`/driver/me`; operações de transporte exigem `driver_profiles.status = APPROVED` e
+devem declarar `tags: ["driver-role", "driver-operational"]` (o guard operacional
+não é aplicado a `/driver/me` nem a logout). O middleware operacional também
+revalida o papel, então a tag não pode ser usada como bypass.
 
 ## Middleware por papel (tags)
 
@@ -62,6 +74,17 @@ Detalhes da semântica do `target`:
 
 **Exceção deliberada (logout):** `logout` fica **sem tag de papel**, para que uma
 sessão válida possa ser encerrada mesmo após a perda do papel CLIENT ou DRIVER.
+
+## Segunda função: CLIENT → DRIVER
+
+`POST /driver/apply` (com `client-role`) adiciona o papel DRIVER a uma identidade
+existente. O endpoint vive no serviço `client` para reutilizar o
+`ClientRoleMiddleware`; a identidade vem do AuthData. O payload aceita apenas
+telefone/CPF, e o repository, em uma transação com `FOR UPDATE` na linha do
+usuário, insere `user_roles(DRIVER)` + `driver_profiles(PENDING)`. Já ser DRIVER,
+CPF/telefone divergentes ou conflito de unicidade retornam 409. ADMIN/SUPPORT nunca
+são concedidos por esse fluxo. O comportamento do cadastro público de novas contas
+não muda.
 
 ## Regras de segurança
 

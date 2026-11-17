@@ -16,6 +16,7 @@ export const ENDPOINT_POLICIES = {
   "client.refresh": "public",
   "client.logout": "authenticated",
   "client.me": "client",
+  "client.applyDriver": "client",
   "driver.register": "public",
   "driver.login": "public",
   "driver.refresh": "public",

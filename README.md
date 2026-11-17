@@ -41,6 +41,13 @@ O projeto reúne as APIs e regras de negócio da plataforma. Entre as funcionali
 
 Por padrão, a API local fica em `http://localhost:4000` e o painel de desenvolvimento do Encore em `http://localhost:9400` (os endereços podem variar conforme a configuração).
 
+### Infraestrutura local
+
+O `docker-compose.yml` sobe PostgreSQL, Redis e um `nsqd` (NSQ) na rede privada do
+Compose. O NSQ está preparado para builds self-hosted e **não** é usado pelo
+`encore run`, que executa o broker local do próprio Encore. Detalhes e comandos de
+validação em [`docs/pubsub/infra-e-limites.md`](./docs/pubsub/infra-e-limites.md).
+
 ## Comandos úteis
 
 | Comando | Ação |

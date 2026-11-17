@@ -42,7 +42,18 @@ export function translatePersistenceError(error: unknown, messages: PersistenceE
   }
 
   if (isCheckViolation(error)) {
-    throw APIError.invalidArgument("Dados inválidos para gravação.");
+    // CHECK é a última barreira de invariantes do banco. Se chegou aqui, a
+    // validação de entrada não cobriu o caso ou houve um bug de domínio; não
+    // classificar automaticamente como erro do usuário (400).
+    const databaseError = findPostgresError(error);
+    const databaseDetail = databaseError
+      ? ` [code=${databaseError.code}${databaseError.constraint_name ? `, constraint=${databaseError.constraint_name}` : ""}]`
+      : "";
+    log.error(`Violação de integridade no banco${databaseDetail}`);
+
+    throw APIError.internal("Não foi possível concluir a operação.").withDetails({
+      reason: ErrorReason.DATA_INTEGRITY_VIOLATION,
+    });
   }
 
   const databaseError = findPostgresError(error);

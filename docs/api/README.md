@@ -40,6 +40,7 @@ repository persiste. Detalhes em [`padroes-do-projeto.md`](./padroes-do-projeto.
 | [`autenticacao-autorizacao.md`](./autenticacao-autorizacao.md) | AuthHandler, `auth.getAuthData()`, middleware por papel, papel ≠ autorização sobre o recurso |
 | [`comunicacao-entre-servicos.md`](./comunicacao-entre-servicos.md) | `~encore/clients`, `service.ref()`, chamada direta no mesmo domínio e quando NÃO criar um endpoint |
 | [`erros.md`](./erros.md) | `APIError`, tabela código × HTTP, `withDetails({ reason })`, padrão do projeto |
+| [`corridas.md`](./corridas.md) | Estado da camada REST de corridas: removida nesta etapa; schema/migrations preservados e plano de reconstrução orientada a Pub/Sub |
 | [`padroes-do-projeto.md`](./padroes-do-projeto.md) | **Regras obrigatórias para novas APIs** — o arquivo referenciado pelo `AGENTS.md` |
 | [`referencias.md`](./referencias.md) | Links da documentação oficial |
 

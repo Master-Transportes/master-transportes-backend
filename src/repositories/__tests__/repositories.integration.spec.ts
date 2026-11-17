@@ -112,12 +112,7 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
       const oldHash = "a".repeat(64);
       const newHash = "b".repeat(64);
 
-      await sessionRepository.create({
-        id: sessionId,
-        userId: user.id,
-        refreshTokenHash: oldHash,
-        expiresAt: new Date(Date.now() + 60_000),
-      });
+      await sessionRepository.create({ id: sessionId, userId: user.id, refreshTokenHash: oldHash, ttlSeconds: 60 });
 
       expect(await sessionRepository.findActiveById(sessionId)).toEqual({ id: sessionId, userId: user.id });
 
@@ -127,7 +122,7 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
           sessionId,
           expectedRefreshTokenHash: "c".repeat(64),
           newRefreshTokenHash: newHash,
-          newExpiresAt: new Date(Date.now() + 120_000),
+          ttlSeconds: 120,
         }),
       ).toBe(false);
 
@@ -137,7 +132,7 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
           sessionId,
           expectedRefreshTokenHash: oldHash,
           newRefreshTokenHash: newHash,
-          newExpiresAt: new Date(Date.now() + 120_000),
+          ttlSeconds: 120,
         }),
       ).toBe(true);
 
@@ -147,7 +142,7 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
           sessionId,
           expectedRefreshTokenHash: oldHash,
           newRefreshTokenHash: "d".repeat(64),
-          newExpiresAt: new Date(Date.now() + 120_000),
+          ttlSeconds: 120,
         }),
       ).toBe(false);
 
@@ -157,9 +152,171 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
       expect(await sessionRepository.findActiveById(sessionId)).toBeNull();
 
       // Revogar sessão de outro usuário não afeta a sessão.
-      expect(await sessionRepository.revoke(sessionId, "outro-usuario")).toBe(false);
+      expect(await sessionRepository.revoke(sessionId, randomUUID())).toBe(false);
     } finally {
       await db.delete(users).where(eq(users.id, user.id));
+    }
+  });
+
+  it("usa o relógio do PostgreSQL para expiração e atualiza updated_at", async () => {
+    if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL ausente");
+    process.env.DATABASE_URL = testDatabaseUrl;
+
+    const { sessionRepository, userRepository } = await import("@/repositories");
+    const { db } = await import("@/infra/database/drizzle");
+    const { sessions, users } = await import("@/infra/database/schema");
+    const { eq, sql } = await import("drizzle-orm");
+
+    const email = `integration-session-clock-${Date.now()}@test.local`;
+    const user = await userRepository.createClientAccount({
+      fullName: "Sessão Relógio",
+      email,
+      passwordHash: "$2b$12$integration.placeholder.hash.value.for.tests.only",
+    });
+
+    try {
+      const expiredId = randomUUID();
+      await sessionRepository.create({
+        id: expiredId,
+        userId: user.id,
+        refreshTokenHash: "e".repeat(64),
+        ttlSeconds: -1,
+      });
+
+      expect(await sessionRepository.findActiveById(expiredId)).toBeNull();
+      expect((await sessionRepository.findById(expiredId))?.isExpired).toBe(true);
+
+      const sessionId = randomUUID();
+      const oldHash = "a".repeat(64);
+      await sessionRepository.create({ id: sessionId, userId: user.id, refreshTokenHash: oldHash, ttlSeconds: 60 });
+
+      // Controla o relógio da linha para não depender da resolução de now().
+      await db
+        .update(sessions)
+        .set({ createdAt: sql`now() - interval '1 hour'`, updatedAt: sql`now() - interval '1 hour'` })
+        .where(eq(sessions.id, sessionId));
+
+      expect(
+        await sessionRepository.rotateRefreshToken({
+          sessionId,
+          expectedRefreshTokenHash: oldHash,
+          newRefreshTokenHash: "b".repeat(64),
+          ttlSeconds: 120,
+        }),
+      ).toBe(true);
+
+      const [afterRotate] = await db
+        .select({ createdAt: sessions.createdAt, updatedAt: sessions.updatedAt, expiresAt: sessions.expiresAt })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId));
+
+      expect(afterRotate.updatedAt.getTime()).toBeGreaterThan(afterRotate.createdAt.getTime());
+      expect(afterRotate.expiresAt.getTime()).toBeGreaterThan(afterRotate.updatedAt.getTime());
+
+      await db
+        .update(sessions)
+        .set({ updatedAt: sql`now() - interval '1 hour'` })
+        .where(eq(sessions.id, sessionId));
+
+      expect(await sessionRepository.revoke(sessionId, user.id)).toBe(true);
+
+      const [afterRevoke] = await db
+        .select({ createdAt: sessions.createdAt, updatedAt: sessions.updatedAt, revokedAt: sessions.revokedAt })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId));
+
+      expect(afterRevoke.revokedAt).not.toBeNull();
+      expect(afterRevoke.updatedAt.getTime()).toBeGreaterThan(afterRevoke.createdAt.getTime());
+      expect(await sessionRepository.findActiveById(sessionId)).toBeNull();
+    } finally {
+      await db.delete(users).where(eq(users.id, user.id));
+    }
+  });
+
+  it("aplica DRIVER a uma identidade CLIENT atomicamente e serializa concorrência", async () => {
+    if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL ausente");
+    process.env.DATABASE_URL = testDatabaseUrl;
+
+    const { driverRepository, userRepository } = await import("@/repositories");
+    const { db } = await import("@/infra/database/drizzle");
+    const { users } = await import("@/infra/database/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const email = `integration-apply-driver-${Date.now()}@test.local`;
+    const user = await userRepository.createClientAccount({
+      fullName: "Cliente que vira motorista",
+      email,
+      passwordHash: "$2b$12$integration.placeholder.hash.value.for.tests.only",
+      phone: "9233334444",
+      cpf: "12345678909",
+    });
+
+    try {
+      const results = await Promise.all([
+        driverRepository.applyDriverRole({ userId: user.id, phone: "9233334444", cpf: "12345678909" }),
+        driverRepository.applyDriverRole({ userId: user.id, phone: "9233334444", cpf: "12345678909" }),
+      ]);
+
+      expect(results.filter(result => result.status === "created")).toHaveLength(1);
+      expect(results.filter(result => result.status === "already_driver")).toHaveLength(1);
+
+      expect(await userRepository.findRolesByUserId(user.id)).toEqual([AuthRole.Client, AuthRole.Driver]);
+
+      const profile = await driverRepository.findProfileByUserId(user.id);
+      expect(profile?.driverStatus).toBe(DriverStatus.PENDING);
+      expect(profile?.accountStatus).toBe(AccountStatus.ACTIVE);
+
+      const conflict = await driverRepository.applyDriverRole({
+        userId: user.id,
+        phone: "9233334444",
+        cpf: "12345678909",
+      });
+      expect(conflict).toEqual({ status: "already_driver" });
+    } finally {
+      await db.delete(users).where(eq(users.id, user.id));
+    }
+  });
+
+  it("não expõe papéis ou status de usuário logicamente excluído", async () => {
+    if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL ausente");
+    process.env.DATABASE_URL = testDatabaseUrl;
+
+    const { driverRepository, userRepository } = await import("@/repositories");
+    const { db } = await import("@/infra/database/drizzle");
+    const { users } = await import("@/infra/database/schema");
+    const { eq, sql } = await import("drizzle-orm");
+
+    const stamp = Date.now();
+    const client = await userRepository.createClientAccount({
+      fullName: "Cliente Excluído",
+      email: `integration-soft-delete-client-${stamp}@test.local`,
+      passwordHash: "$2b$12$integration.placeholder.hash.value.for.tests.only",
+    });
+    const driver = await driverRepository.createDriverAccount({
+      fullName: "Motorista Excluído",
+      email: `integration-soft-delete-driver-${stamp}@test.local`,
+      passwordHash: "$2b$12$integration.placeholder.hash.value.for.tests.only",
+      phone: "92999990002",
+      cpf: "16899535009",
+    });
+
+    try {
+      await db
+        .update(users)
+        .set({ deletedAt: sql`now()` })
+        .where(eq(users.id, client.id));
+      await db
+        .update(users)
+        .set({ deletedAt: sql`now()` })
+        .where(eq(users.id, driver.id));
+
+      expect(await userRepository.findRolesByUserId(client.id)).toEqual([]);
+      expect(await userRepository.findRolesByUserId(driver.id)).toEqual([]);
+      expect(await driverRepository.findStatusByUserId(driver.id)).toBeNull();
+      expect(await driverRepository.findProfileByUserId(driver.id)).toBeNull();
+    } finally {
+      await db.delete(users).where(eq(users.id, driver.id));
+      await db.delete(users).where(eq(users.id, client.id));
     }
   });
 });

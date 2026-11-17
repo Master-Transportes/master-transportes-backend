@@ -6,11 +6,15 @@ services:
     container_name: mt_postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    command:
+      - postgres
+      - -c
+      - timezone=UTC
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER é obrigatório}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD é obrigatório}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB é obrigatório}
     volumes:
       - postgres_data:/var/lib/postgresql
     networks:
@@ -20,6 +24,30 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 10s
+
+  nsqd:
+    image: nsqio/nsq:v1.3.0
+    container_name: mt_nsqd
+    restart: unless-stopped
+    command:
+      - /nsqd
+      - --data-path=/data
+      - --mem-queue-size=0
+    ports:
+      - "127.0.0.1:${NSQD_HTTP_PORT:-4151}:4151"
+    expose:
+      - "4150"
+    volumes:
+      - nsq_data:/data
+    networks:
+      - master-transporte-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:4151/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7.2-alpine
@@ -28,11 +56,10 @@ services:
     command: >
       redis-server
       --appendonly yes
-      --protected-mode no
       --maxmemory 512mb
       --maxmemory-policy volatile-lru
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -45,6 +72,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+      start_period: 10s
 
 networks:
   master-transporte-network:
@@ -54,3 +82,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  nsq_data:

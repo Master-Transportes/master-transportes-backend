@@ -61,10 +61,12 @@ describe("translatePersistenceError", () => {
     expect(error.details).toEqual({ reason: ErrorReason.SERVICE_UNAVAILABLE });
   });
 
-  it("traduz CHECK violation para 400", () => {
-    const error = capture(() => translatePersistenceError(postgresError("23514")));
+  it("trata CHECK violation como falha de integridade interna, não como erro de entrada", () => {
+    const error = capture(() => translatePersistenceError(postgresError("23514", "rides_searching_state_check")));
 
-    expect(error.code).toBe(ErrCode.InvalidArgument);
+    expect(error.code).toBe(ErrCode.Internal);
+    expect(error.details).toEqual({ reason: ErrorReason.DATA_INTEGRITY_VIOLATION });
+    expect(error.message).toBe("Não foi possível concluir a operação.");
   });
 
   it("não converte erro desconhecido em validação, credencial ou conflito", () => {

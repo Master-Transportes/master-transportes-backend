@@ -158,7 +158,11 @@ const results = await db
   .where(and(gte(rides.createdAt, start), lt(rides.createdAt, end)));
 ```
 
-- `rides` é uma **tabela futura**, não existente no schema atual.
+- `rides` e `ride_offers` **existem no schema, na migration `0001` e já possuem a
+  primeira camada funcional REST** (ver [`../api/corridas.md`](../api/corridas.md)).
+  O exemplo de filtro por dia local continua sendo referência para quando o
+  histórico paginado por dia for implementado; a listagem atual não aceita filtro
+  de data.
 - O template SQL do Drizzle usa **parâmetros** (sem concatenar entrada do cliente),
   mas `date` e `timeZone` devem ser validados antes (ver
   [`validacao-e-consumo.md`](./validacao-e-consumo.md)).

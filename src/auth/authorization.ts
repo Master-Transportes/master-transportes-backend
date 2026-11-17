@@ -7,6 +7,19 @@ export function hasRole(authData: AuthData, role: AuthRole): boolean {
   return authData.roles.includes(role);
 }
 
+/**
+ * Garante que o contexto autenticado existe antes de usar `userID`/`sessionId`.
+ * Substitui o non-null assertion (`!`) por um 401 explícito e testável.
+ */
+export function requireAuthData(authData: AuthData | null | undefined): AuthData {
+  if (!authData) {
+    throw APIError.unauthenticated("Autenticação necessária.").withDetails({
+      reason: ErrorReason.AUTHENTICATION_REQUIRED,
+    });
+  }
+  return authData;
+}
+
 const DEFAULT_DENIED_MESSAGE = "Você não tem permissão para acessar este recurso.";
 
 /**

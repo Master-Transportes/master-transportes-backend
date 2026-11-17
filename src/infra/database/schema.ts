@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   primaryKey,
   check,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { AccountStatus, ROLES, ACCOUNT_STATUSES } from "@/domain/identity/identity.types";
 import {
@@ -33,9 +34,26 @@ export const documentVerificationStatusEnum = pgEnum(
   "document_verification_status",
   DRIVER_DOCUMENT_VERIFICATION_STATUSES,
 );
-// Vocabulário de estados definido no próprio schema (fonte do enum PostgreSQL).
-export const rideStatusEnum = pgEnum("ride_status", [
+// Enum legado das migrations 0001–0002. Não é usado por nenhuma tabela nova;
+// permanece para compatibilidade do histórico de migrations.
+export const legacyRideStatusEnum = pgEnum("ride_status", [
   "SEARCHING",
+  "ACCEPTED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+]);
+
+// Solicitação de transporte ≠ corrida confirmada. A solicitação tem seu próprio
+// ciclo de vida; a corrida só nasce quando um motorista aceita.
+export const rideRequestStatusEnum = pgEnum("ride_request_status", [
+  "SEARCHING",
+  "ACCEPTED",
+  "EXPIRED",
+  "CANCELLED",
+  "COMPLETED",
+]);
+export const confirmedRideStatusEnum = pgEnum("confirmed_ride_status", [
   "ACCEPTED",
   "IN_PROGRESS",
   "COMPLETED",
@@ -72,7 +90,8 @@ export const users = pgTable(
     deletedAt: timestamptz("deleted_at"),
   },
   t => [
-    // E-mail único entre contas ativas, sem distinção de maiúsculas/minúsculas.
+    // E-mail único entre usuários não excluídos, sem distinção de maiúsculas/minúsculas.
+    // O índice NÃO filtra status: contas INACTIVE/BANNED ainda bloqueiam o e-mail.
     uniqueIndex("users_email_lower_unique")
       .on(sql`lower(${t.email})`)
       .where(sql`deleted_at IS NULL`),
@@ -209,30 +228,112 @@ export type SessionRow = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 
 // ---------------------------------------------------------------------------
-// rides — corrida solicitada por um passageiro (histórico permanente, sem soft
-// delete). Coordenadas em numeric(9,6) (precisão ≈ 11 cm), endereço em texto.
-// Timestamps de eventos usam now() do PostgreSQL (autoridade do servidor).
+// ride_requests — solicitação de transporte, ainda NÃO é uma corrida confirmada
 // ---------------------------------------------------------------------------
-export const rides = pgTable(
-  "rides",
+export const rideRequests = pgTable(
+  "ride_requests",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    // FK restrict: preserva histórico mesmo se a conta for removida (o hard
-    // delete de usuário com corridas fica explicitamente bloqueado).
     passengerId: uuid("passenger_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    status: rideStatusEnum("status").notNull().default("SEARCHING"),
+    status: rideRequestStatusEnum("status").notNull().default("SEARCHING"),
     originLat: numeric("origin_lat", { precision: 9, scale: 6 }).notNull(),
     originLng: numeric("origin_lng", { precision: 9, scale: 6 }).notNull(),
     originAddress: text("origin_address").notNull(),
     destinationLat: numeric("destination_lat", { precision: 9, scale: 6 }).notNull(),
     destinationLng: numeric("destination_lng", { precision: 9, scale: 6 }).notNull(),
     destinationAddress: text("destination_address").notNull(),
-    // Referencia driver_profiles (não users): garante que todo motorista
-    // atribuído tenha perfil de motorista. Restrict preserva o histórico.
-    driverId: uuid("driver_id").references(() => driverProfiles.userId, { onDelete: "restrict" }),
+    // Prazo máximo de busca, definido pelo servidor/banco. Uma solicitação
+    // vencida é reconciliada para EXPIRED de forma lazy em toda leitura/escrita.
+    searchExpiresAt: timestamptz("search_expires_at").notNull(),
     acceptedAt: timestamptz("accepted_at"),
+    cancelledAt: timestamptz("cancelled_at"),
+    cancelledByUserId: uuid("cancelled_by_user_id").references(() => users.id, { onDelete: "restrict" }),
+    cancellationReason: text("cancellation_reason"),
+    createdAt: timestamptz("created_at").defaultNow().notNull(),
+    updatedAt: timestamptz("updated_at").defaultNow().notNull(),
+  },
+  t => [
+    index("ride_requests_passenger_history_idx").on(t.passengerId, t.createdAt),
+    // Sweep/reconciliação lazy de solicitações vencidas.
+    index("ride_requests_status_expires_idx").on(t.status, t.searchExpiresAt),
+    // No máximo uma solicitação aberta/aceita por passageiro. Expiradas e
+    // canceladas não bloqueiam nova solicitação.
+    uniqueIndex("ride_requests_passenger_open_unique")
+      .on(t.passengerId)
+      .where(sql`status IN ('SEARCHING', 'ACCEPTED')`),
+    // Necessário para a FK composta de rides (request_id + passenger_id).
+    uniqueIndex("ride_requests_id_passenger_unique").on(t.id, t.passengerId),
+    check("ride_requests_origin_coords_check", sql`origin_lat BETWEEN -90 AND 90 AND origin_lng BETWEEN -180 AND 180`),
+    check(
+      "ride_requests_destination_coords_check",
+      sql`destination_lat BETWEEN -90 AND 90 AND destination_lng BETWEEN -180 AND 180`,
+    ),
+    check("ride_requests_origin_address_not_blank", sql`length(trim(origin_address)) > 0`),
+    check("ride_requests_destination_address_not_blank", sql`length(trim(destination_address)) > 0`),
+    check("ride_requests_search_window_check", sql`search_expires_at > created_at`),
+    check(
+      "ride_requests_searching_state_check",
+      sql`status <> 'SEARCHING' OR (
+        accepted_at IS NULL AND cancelled_at IS NULL AND cancelled_by_user_id IS NULL
+      )`,
+    ),
+    check(
+      "ride_requests_accepted_state_check",
+      sql`status <> 'ACCEPTED' OR (
+        accepted_at IS NOT NULL AND cancelled_at IS NULL AND cancelled_by_user_id IS NULL
+      )`,
+    ),
+    check(
+      "ride_requests_expired_state_check",
+      sql`status <> 'EXPIRED' OR (
+        accepted_at IS NULL AND cancelled_at IS NULL AND cancelled_by_user_id IS NULL
+      )`,
+    ),
+    check(
+      "ride_requests_completed_state_check",
+      sql`status <> 'COMPLETED' OR (
+        accepted_at IS NOT NULL AND cancelled_at IS NULL AND cancelled_by_user_id IS NULL
+      )`,
+    ),
+    check(
+      "ride_requests_cancelled_state_check",
+      sql`status <> 'CANCELLED' OR (cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL)`,
+    ),
+    check("ride_requests_cancelled_by_state_check", sql`cancelled_by_user_id IS NULL OR status = 'CANCELLED'`),
+    check("ride_requests_cancelled_at_state_check", sql`cancelled_at IS NULL OR status = 'CANCELLED'`),
+  ],
+);
+
+export type RideRequestRow = typeof rideRequests.$inferSelect;
+export type NewRideRequest = typeof rideRequests.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// rides — corrida efetivamente confirmada; só existe após aceite válido.
+// Sem soft delete; FKs restrict preservam o histórico.
+// ---------------------------------------------------------------------------
+export const rides = pgTable(
+  "rides",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    rideRequestId: uuid("ride_request_id")
+      .notNull()
+      .references(() => rideRequests.id, { onDelete: "restrict" }),
+    passengerId: uuid("passenger_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    driverId: uuid("driver_id")
+      .notNull()
+      .references(() => driverProfiles.userId, { onDelete: "restrict" }),
+    status: confirmedRideStatusEnum("status").notNull().default("ACCEPTED"),
+    originLat: numeric("origin_lat", { precision: 9, scale: 6 }).notNull(),
+    originLng: numeric("origin_lng", { precision: 9, scale: 6 }).notNull(),
+    originAddress: text("origin_address").notNull(),
+    destinationLat: numeric("destination_lat", { precision: 9, scale: 6 }).notNull(),
+    destinationLng: numeric("destination_lng", { precision: 9, scale: 6 }).notNull(),
+    destinationAddress: text("destination_address").notNull(),
+    acceptedAt: timestamptz("accepted_at").notNull(),
     startedAt: timestamptz("started_at"),
     completedAt: timestamptz("completed_at"),
     cancelledAt: timestamptz("cancelled_at"),
@@ -242,15 +343,25 @@ export const rides = pgTable(
     updatedAt: timestamptz("updated_at").defaultNow().notNull(),
   },
   t => [
-    // Despacho/matching: corridas por estado, mais recentes primeiro.
+    // 1:1 solicitação confirmada → corrida.
+    uniqueIndex("rides_request_unique").on(t.rideRequestId),
+    // Despacho/histórico.
     index("rides_status_created_idx").on(t.status, t.createdAt),
-    // Histórico do passageiro ("minhas corridas").
     index("rides_passenger_history_idx").on(t.passengerId, t.createdAt),
-    // Invariante: um motorista tem no máximo UMA corrida ativa
-    // (ACCEPTED ou IN_PROGRESS); também serve à consulta da corrida ativa dele.
+    // Um motorista tem no máximo uma corrida ativa.
     uniqueIndex("rides_driver_active_unique")
       .on(t.driverId)
       .where(sql`status IN ('ACCEPTED', 'IN_PROGRESS')`),
+    // Um passageiro tem no máximo uma corrida ativa.
+    uniqueIndex("rides_passenger_active_unique")
+      .on(t.passengerId)
+      .where(sql`status IN ('ACCEPTED', 'IN_PROGRESS')`),
+    // Garante que a corrida pertence ao mesmo passageiro da solicitação.
+    foreignKey({
+      columns: [t.rideRequestId, t.passengerId],
+      foreignColumns: [rideRequests.id, rideRequests.passengerId],
+      name: "rides_request_passenger_fk",
+    }),
     check("rides_origin_coords_check", sql`origin_lat BETWEEN -90 AND 90 AND origin_lng BETWEEN -180 AND 180`),
     check(
       "rides_destination_coords_check",
@@ -258,19 +369,46 @@ export const rides = pgTable(
     ),
     check("rides_origin_address_not_blank", sql`length(trim(origin_address)) > 0`),
     check("rides_destination_address_not_blank", sql`length(trim(destination_address)) > 0`),
-    // Enquanto SEARCHING nenhuma atribuição pode existir.
-    check("rides_searching_no_driver_check", sql`status <> 'SEARCHING' OR driver_id IS NULL`),
-    // Motorista atribuído exige data de aceite.
-    check("rides_driver_requires_accepted_at_check", sql`driver_id IS NULL OR accepted_at IS NOT NULL`),
-    // Datas de evento só existem a partir do estado correspondente.
-    check("rides_accepted_at_state_check", sql`accepted_at IS NULL OR status <> 'SEARCHING'`),
-    check("rides_started_at_state_check", sql`started_at IS NULL OR status IN ('IN_PROGRESS', 'COMPLETED')`),
-    check("rides_completed_at_state_check", sql`completed_at IS NULL OR status = 'COMPLETED'`),
-    check("rides_cancelled_at_state_check", sql`cancelled_at IS NULL OR status = 'CANCELLED'`),
-    // Cancelamento identifica autor e momento.
     check(
-      "rides_cancelled_identity_check",
-      sql`status <> 'CANCELLED' OR (cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL)`,
+      "rides_accepted_state_check",
+      sql`status <> 'ACCEPTED' OR (
+        started_at IS NULL AND completed_at IS NULL
+        AND cancelled_at IS NULL AND cancelled_by_user_id IS NULL
+      )`,
+    ),
+    check(
+      "rides_in_progress_state_check",
+      sql`status <> 'IN_PROGRESS' OR (
+        started_at IS NOT NULL AND completed_at IS NULL
+        AND cancelled_at IS NULL AND cancelled_by_user_id IS NULL
+      )`,
+    ),
+    check(
+      "rides_completed_state_check",
+      sql`status <> 'COMPLETED' OR (
+        started_at IS NOT NULL AND completed_at IS NOT NULL
+        AND cancelled_at IS NULL AND cancelled_by_user_id IS NULL
+      )`,
+    ),
+    // CANCELLED preserva accepted_at/started_at quando o cancelamento ocorre
+    // depois dessas etapas; completed_at nunca coexiste com cancelamento.
+    check(
+      "rides_cancelled_state_check",
+      sql`status <> 'CANCELLED' OR (
+        cancelled_at IS NOT NULL AND cancelled_by_user_id IS NOT NULL AND completed_at IS NULL
+      )`,
+    ),
+    check("rides_cancelled_by_state_check", sql`cancelled_by_user_id IS NULL OR status = 'CANCELLED'`),
+    check(
+      "rides_chronology_check",
+      sql`(started_at IS NULL OR started_at >= accepted_at)
+        AND (completed_at IS NULL OR (started_at IS NOT NULL AND completed_at >= started_at))`,
+    ),
+    check(
+      "rides_cancelled_chronology_check",
+      sql`cancelled_at IS NULL
+        OR (cancelled_at >= accepted_at
+          AND (started_at IS NULL OR cancelled_at >= started_at))`,
     ),
   ],
 );
@@ -279,20 +417,16 @@ export type RideRow = typeof rides.$inferSelect;
 export type NewRide = typeof rides.$inferInsert;
 
 // ---------------------------------------------------------------------------
-// ride_offers — oferta de uma corrida a um motorista elegível (decisão do
-// matching, que é outro módulo). Histórico permanente: rejeitadas, expiradas
-// e canceladas permanecem registradas.
+// ride_offers — oferta de uma SOLICITAÇÃO a um motorista elegível.
+// Histórico permanente: rejeitadas, expiradas e canceladas permanecem.
 // ---------------------------------------------------------------------------
 export const rideOffers = pgTable(
   "ride_offers",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    // Cascade: histórico de ofertas não sobrevive à corrida (rides não tem
-    // delete na prática, mas o vínculo estrutural é de propriedade).
-    rideId: uuid("ride_id")
+    rideRequestId: uuid("ride_request_id")
       .notNull()
-      .references(() => rides.id, { onDelete: "cascade" }),
-    // Referencia driver_profiles: só motoristas com perfil recebem ofertas.
+      .references(() => rideRequests.id, { onDelete: "restrict" }),
     driverUserId: uuid("driver_user_id")
       .notNull()
       .references(() => driverProfiles.userId, { onDelete: "restrict" }),
@@ -304,30 +438,21 @@ export const rideOffers = pgTable(
     updatedAt: timestamptz("updated_at").defaultNow().notNull(),
   },
   t => [
-    // A mesma corrida não pode ter duas ofertas pendentes para o mesmo motorista.
     uniqueIndex("ride_offers_pending_unique")
-      .on(t.rideId, t.driverUserId)
+      .on(t.rideRequestId, t.driverUserId)
       .where(sql`status = 'PENDING'`),
-    // Invariante: apenas UMA oferta aceita por corrida (backstop do aceite atômico).
     uniqueIndex("ride_offers_accepted_unique")
-      .on(t.rideId)
+      .on(t.rideRequestId)
       .where(sql`status = 'ACCEPTED'`),
-    // Caixa de entrada do motorista: ofertas pendentes destinadas a ele.
     index("ride_offers_driver_pending_idx")
       .on(t.driverUserId)
       .where(sql`status = 'PENDING'`),
-    // Junção/listagem de ofertas da corrida (FK não cria índice automaticamente).
-    index("ride_offers_ride_idx").on(t.rideId),
-    // Sweep de expiração: ofertas pendentes vencidas.
+    index("ride_offers_request_idx").on(t.rideRequestId),
     index("ride_offers_expiry_idx")
       .on(t.expiresAt)
       .where(sql`status = 'PENDING'`),
     check("ride_offers_window_check", sql`expires_at > offered_at`),
-    // responded_at existe se e somente se o motorista respondeu (aceite/recusa).
-    check(
-      "ride_offers_response_check",
-      sql`((status IN ('ACCEPTED', 'REJECTED')) = (responded_at IS NOT NULL))`,
-    ),
+    check("ride_offers_response_check", sql`((status IN ('ACCEPTED', 'REJECTED')) = (responded_at IS NOT NULL))`),
   ],
 );
 
