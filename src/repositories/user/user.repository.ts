@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
 import { db } from "@/infra/database/drizzle";
 import { userRoles, users } from "@/infra/database/schema";
@@ -44,14 +44,9 @@ export class DrizzleUserRepository implements UserRepository {
 
   async findByEmail(email: string): Promise<UserAuth | null> {
     const [row] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        passwordHash: users.passwordHash,
-        status: users.status,
-      })
+      .select({ id: users.id, email: users.email, passwordHash: users.passwordHash, status: users.status })
       .from(users)
-      .where(and(eq(users.email, email), isNull(users.deletedAt)))
+      .where(and(sql`lower(${users.email}) = lower(${email})`, isNull(users.deletedAt)))
       .limit(1);
 
     return row ?? null;
@@ -86,10 +81,7 @@ export class DrizzleUserRepository implements UserRepository {
   }
 
   async findRolesByUserId(userId: string): Promise<AuthRole[]> {
-    const rows = await db
-      .select({ role: userRoles.role })
-      .from(userRoles)
-      .where(eq(userRoles.userId, userId));
+    const rows = await db.select({ role: userRoles.role }).from(userRoles).where(eq(userRoles.userId, userId));
 
     return rows.map(row => row.role);
   }
