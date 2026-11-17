@@ -1,5 +1,9 @@
 # Encore Pub/Sub e comunicação entre serviços
 
+> **Nota:** esta página cobre o caso específico de **streaming entre serviços Encore**.
+> A referência completa de Pub/Sub (topics, garantias de entrega, idempotência, DLQ,
+> Outbox, ordenação, providers) está em [`../pubsub/README.md`](../pubsub/README.md).
+
 ## Para que serve o Pub/Sub nativo
 
 Especialmente útil quando uma operação concluída precisa desencadear outras operações em
