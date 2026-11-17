@@ -17,6 +17,7 @@ visão geral, exemplos completos e referências.
 | [`temporal/`](./temporal/README.md) | Política de datas e horários: instantes × datas civis, contrato de API em UTC, filtros por dia local, autoridade dos timestamps e testes de regressão |
 | [`pubsub/`](./pubsub/README.md) | Pub/Sub do Encore: topics e subscribers, garantias de entrega, idempotência, DLQ, Outbox, ordenação, providers e testes |
 | [`deployment/`](./deployment/README.md) | Estratégias de implantação: self-hosting (infra config, build Docker, checklist de segurança); Encore Platform pendente de decisão |
+| [`roadmap/`](./roadmap/README.md) | Roadmap de implementação do produto: etapas 0–8 (disponibilidade de motoristas, solicitações, ofertas transacionais, Redis GEO, despacho via Pub/Sub, streaming, ciclo da corrida, recuperação) e decisões arquiteturais |
 
 ## Convenções dos documentos
 
