@@ -43,7 +43,7 @@ export const logout = api<void, LogoutResponse>(
 );
 
 export const me = api<void, ClientMeResponse>(
-  { expose: true, method: "GET", path: "/client/me", auth: true, sensitive: true },
+  { expose: true, method: "GET", path: "/client/me", auth: true, sensitive: true, tags: ["client-role"] },
   async () => {
     const { userID } = auth.getAuthData()!;
     return clientService.getMe(userID);
