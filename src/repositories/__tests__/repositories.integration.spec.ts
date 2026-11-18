@@ -91,6 +91,190 @@ describe.skipIf(!testDatabaseUrl)("Repositories — integração PostgreSQL", ()
     }
   });
 
+  it("disponibilidade do motorista exige APPROVED e persiste a intenção", async () => {
+    if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL ausente");
+    process.env.DATABASE_URL = testDatabaseUrl;
+
+    const { driverRepository } = await import("@/repositories");
+    const { db } = await import("@/infra/database/drizzle");
+    const { users, driverProfiles } = await import("@/infra/database/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const email = `integration-availability-${Date.now()}@test.local`;
+    const created = await driverRepository.createDriverAccount({
+      fullName: "Disponibilidade Integração",
+      email,
+      passwordHash: "$2b$12$integration.placeholder.hash.value.for.tests.only",
+      phone: "92999990001",
+      cpf: "11144477735",
+    });
+
+    try {
+      // PENDING não entra em operação.
+      expect(await driverRepository.setAvailability(created.id, true)).toEqual({ status: "not_approved" });
+      expect((await driverRepository.findAvailabilityByUserId(created.id))?.available).toBe(false);
+
+      // Aprovado ativa e desativa; o estado fica persistido.
+      await db
+        .update(driverProfiles)
+        .set({ status: DriverStatus.APPROVED })
+        .where(eq(driverProfiles.userId, created.id));
+
+      expect(await driverRepository.setAvailability(created.id, true)).toEqual({
+        status: "updated",
+        availability: { available: true, driverStatus: DriverStatus.APPROVED, accountStatus: AccountStatus.ACTIVE },
+      });
+      expect(await driverRepository.findAvailabilityByUserId(created.id)).toEqual({
+        available: true,
+        driverStatus: DriverStatus.APPROVED,
+        accountStatus: AccountStatus.ACTIVE,
+      });
+
+      expect(await driverRepository.setAvailability(created.id, false)).toEqual({
+        status: "updated",
+        availability: { available: false, driverStatus: DriverStatus.APPROVED, accountStatus: AccountStatus.ACTIVE },
+      });
+
+      // Perfil removido (soft delete) deixa de responder.
+      await db.update(driverProfiles).set({ deletedAt: new Date() }).where(eq(driverProfiles.userId, created.id));
+      expect(await driverRepository.findAvailabilityByUserId(created.id)).toBeNull();
+      expect(await driverRepository.setAvailability(created.id, true)).toEqual({ status: "profile_not_found" });
+    } finally {
+      await db.delete(users).where(eq(users.id, created.id));
+    }
+  });
+
+  it("ativação de disponibilidade é bloqueada durante corrida ativa e liberada após conclusão", async () => {
+    if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL ausente");
+    process.env.DATABASE_URL = testDatabaseUrl;
+
+    const { driverRepository, userRepository } = await import("@/repositories");
+    const { db } = await import("@/infra/database/drizzle");
+    const { users, driverProfiles, rideRequests, rides } = await import("@/infra/database/schema");
+    const { eq, sql } = await import("drizzle-orm");
+
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const passwordHash = "$2b$12$integration.placeholder.hash.value.for.tests.only";
+
+    const passenger = await userRepository.createClientAccount({
+      fullName: "Passageiro Disponibilidade",
+      email: `availability-passenger-${stamp}@test.local`,
+      passwordHash,
+    });
+    const driver = await driverRepository.createDriverAccount({
+      fullName: "Motorista Disponibilidade",
+      email: `availability-driver-${stamp}@test.local`,
+      passwordHash,
+      phone: "92999990110",
+      cpf: "45678912396",
+    });
+
+    try {
+      await db
+        .update(driverProfiles)
+        .set({ status: DriverStatus.APPROVED })
+        .where(eq(driverProfiles.userId, driver.id));
+
+      const [request] = await db
+        .insert(rideRequests)
+        .values({
+          passengerId: passenger.id,
+          status: "SEARCHING",
+          originLat: "0.000000",
+          originLng: "0.000000",
+          originAddress: "Origem",
+          destinationLat: "1.000000",
+          destinationLng: "1.000000",
+          destinationAddress: "Destino",
+          searchExpiresAt: sql`now() + interval '5 minutes'`,
+        })
+        .returning();
+
+      const [ride] = await db
+        .insert(rides)
+        .values({
+          rideRequestId: request.id,
+          passengerId: passenger.id,
+          driverId: driver.id,
+          status: "ACCEPTED",
+          originLat: "0.000000",
+          originLng: "0.000000",
+          originAddress: "Origem",
+          destinationLat: "1.000000",
+          destinationLng: "1.000000",
+          destinationAddress: "Destino",
+          acceptedAt: new Date(),
+        })
+        .returning();
+
+      // Corrida ativa bloqueia ativação na mesma transação do lock.
+      expect(await driverRepository.setAvailability(driver.id, true)).toEqual({ status: "active_ride_conflict" });
+      expect((await driverRepository.findAvailabilityByUserId(driver.id))?.available).toBe(false);
+
+      // Desativação nunca é bloqueada.
+      expect(await driverRepository.setAvailability(driver.id, false)).toMatchObject({ status: "updated" });
+
+      // Corrida concluída libera a ativação (não reativa automaticamente).
+      await db
+        .update(rides)
+        .set({ status: "COMPLETED", startedAt: new Date(), completedAt: new Date() })
+        .where(eq(rides.id, ride.id));
+      expect(await driverRepository.setAvailability(driver.id, true)).toMatchObject({ status: "updated" });
+    } finally {
+      await db.delete(rides).where(eq(rides.driverId, driver.id));
+      await db.delete(rideRequests).where(eq(rideRequests.passengerId, passenger.id));
+      await db.delete(users).where(eq(users.id, passenger.id));
+      await db.delete(users).where(eq(users.id, driver.id));
+    }
+  });
+
+  it("alterações concorrentes de disponibilidade são serializadas sem perda de consistência", async () => {
+    if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL ausente");
+    process.env.DATABASE_URL = testDatabaseUrl;
+
+    const { driverRepository } = await import("@/repositories");
+    const { db } = await import("@/infra/database/drizzle");
+    const { users, driverProfiles } = await import("@/infra/database/schema");
+    const { eq } = await import("drizzle-orm");
+
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const driver = await driverRepository.createDriverAccount({
+      fullName: "Motorista Concorrente",
+      email: `availability-concurrent-${stamp}@test.local`,
+      passwordHash: "$2b$12$integration.placeholder.hash.value.for.tests.only",
+      phone: "92999990111",
+      cpf: "52998224725",
+    });
+
+    try {
+      await db
+        .update(driverProfiles)
+        .set({ status: DriverStatus.APPROVED })
+        .where(eq(driverProfiles.userId, driver.id));
+
+      // Mesmo valor em paralelo: FOR UPDATE serializa, ambas confirmam.
+      const same = await Promise.all([
+        driverRepository.setAvailability(driver.id, true),
+        driverRepository.setAvailability(driver.id, true),
+      ]);
+      expect(same.every(result => result.status === "updated")).toBe(true);
+      expect((await driverRepository.findAvailabilityByUserId(driver.id))?.available).toBe(true);
+
+      // Valores opostos em paralelo: ambas confirmam (FOR UPDATE serializa) e
+      // o estado final é consistente — o último commit vence, sem estado
+      // corrompido nem erro de deadlock.
+      const opposite = await Promise.all([
+        driverRepository.setAvailability(driver.id, false),
+        driverRepository.setAvailability(driver.id, true),
+      ]);
+      expect(opposite.every(result => result.status === "updated")).toBe(true);
+      const final = (await driverRepository.findAvailabilityByUserId(driver.id))?.available;
+      expect(typeof final).toBe("boolean");
+    } finally {
+      await db.delete(users).where(eq(users.id, driver.id));
+    }
+  });
+
   it("rotação de refresh token é compare-and-swap e revogação é idempotente", async () => {
     if (!testDatabaseUrl) throw new Error("TEST_DATABASE_URL ausente");
     process.env.DATABASE_URL = testDatabaseUrl;

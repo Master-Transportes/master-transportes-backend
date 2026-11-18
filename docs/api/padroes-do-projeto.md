@@ -19,7 +19,7 @@ Sem regras de negócio no handler, sem acesso direto a repositórios do endpoint
 export const me = api<void, ClientMeResponse>(
   { expose: true, method: "GET", path: "/client/me", auth: true, sensitive: true, tags: ["client-role"] },
   async () => {
-    const { userID } = requireAuthData(auth.getAuthData());
+    const { userID } = auth.getAuthData()!;
     return clientService.getMe(userID);
   },
 );

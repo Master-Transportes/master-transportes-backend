@@ -15,20 +15,25 @@ Service ..................... verifica permissão sobre o recurso específico
 
 ## AuthHandler e `getAuthData()`
 
-Endpoints com `auth: true` passam pelo AuthHandler antes do handler. O dado de
-autenticação fica disponível via `auth.getAuthData()`; use `requireAuthData()` para
-transformar a ausência de contexto em 401 explícito, em vez de `!`:
+Endpoints com `auth: true` passam pelo AuthHandler (`src/auth/auth.gateway.ts`) antes do
+handler: JWT válido → sessão ativa → conta ativa → papéis efetivos, todos no PostgreSQL.
+Com isso garantido, o endpoint usa `auth.getAuthData()` diretamente:
 
 ```ts
 // Padrão real em uso (src/api/client/client.ts)
 export const me = api<void, ClientMeResponse>(
   { expose: true, method: "GET", path: "/client/me", auth: true, sensitive: true, tags: ["client-role"] },
   async () => {
-    const { userID } = requireAuthData(auth.getAuthData());
+    const { userID } = auth.getAuthData()!;
     return clientService.getMe(userID);
   },
 );
 ```
+
+O `!` é seguro apenas em endpoints `auth: true` (o Encore só executa o handler com AuthData
+presente). **Não usar `!` em endpoints `auth: false`** — lá o contexto pode ser nulo.
+Os middlewares de papel mantêm um guard interno de nulo como defesa de estágio, porque o
+getter é injetável em testes.
 
 **Login/refresh são públicos (`auth: false`) e não passam pelo middleware de papel.**
 Por isso eles recebem `AuthRole.Client`/`AuthRole.Driver` no service: o parâmetro

@@ -2,7 +2,12 @@ import { describe, expect, it } from "bun:test";
 import { APIError, ErrCode } from "encore.dev/api";
 import { ErrorReason } from "@/constants/error-reasons";
 import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
-import { authenticateRequest, extractBearerToken, translateAuthFailure, type AuthLookup } from "@/auth/authenticate";
+import {
+  authenticateAuthorization,
+  extractBearerToken,
+  translateAuthFailure,
+  type AuthLookup,
+} from "@/auth/auth.gateway";
 
 const CLAIMS = { subject: "user-1", sessionId: "session-1", tokenId: "token-1" };
 
@@ -37,9 +42,9 @@ describe("extractBearerToken", () => {
   });
 });
 
-describe("authenticateRequest", () => {
+describe("authenticateAuthorization (cadeia do AuthHandler)", () => {
   it("retorna AuthData com papéis efetivos do banco", async () => {
-    const authData = await authenticateRequest(
+    const authData = await authenticateAuthorization(
       "Bearer token",
       lookup({ findRoles: async () => [AuthRole.Client, AuthRole.Driver] }),
     );
@@ -48,7 +53,7 @@ describe("authenticateRequest", () => {
   });
 
   it("retorna 401 quando não há token", async () => {
-    const error = await captureError(authenticateRequest(undefined, lookup()));
+    const error = await captureError(authenticateAuthorization(undefined, lookup()));
 
     expect(error.code).toBe(ErrCode.Unauthenticated);
     expect(error.details).toEqual({ reason: ErrorReason.AUTHENTICATION_REQUIRED });
@@ -56,7 +61,7 @@ describe("authenticateRequest", () => {
 
   it("retorna 401 quando o JWT é inválido", async () => {
     const error = await captureError(
-      authenticateRequest("Bearer invalido", lookup({ verifyAccessToken: async () => null })),
+      authenticateAuthorization("Bearer invalido", lookup({ verifyAccessToken: async () => null })),
     );
 
     expect(error.code).toBe(ErrCode.Unauthenticated);
@@ -65,7 +70,7 @@ describe("authenticateRequest", () => {
 
   it("retorna 401 quando a sessão não existe, pertence a outro usuário ou está revogada", async () => {
     for (const findActiveSession of [async () => null, async () => ({ id: "session-1", userId: "outro-usuario" })]) {
-      const error = await captureError(authenticateRequest("Bearer token", lookup({ findActiveSession })));
+      const error = await captureError(authenticateAuthorization("Bearer token", lookup({ findActiveSession })));
 
       expect(error.code).toBe(ErrCode.Unauthenticated);
       expect(error.details).toEqual({ reason: ErrorReason.SESSION_INVALID });
@@ -78,7 +83,7 @@ describe("authenticateRequest", () => {
       async () => ({ id: "user-1", status: AccountStatus.BANNED }),
       async () => ({ id: "user-1", status: AccountStatus.INACTIVE }),
     ]) {
-      const error = await captureError(authenticateRequest("Bearer token", lookup({ findUserAuthState })));
+      const error = await captureError(authenticateAuthorization("Bearer token", lookup({ findUserAuthState })));
 
       expect(error.code).toBe(ErrCode.Unauthenticated);
       expect(error.details).toEqual({ reason: ErrorReason.ACCOUNT_UNAVAILABLE });
@@ -86,7 +91,7 @@ describe("authenticateRequest", () => {
   });
 
   it("devolve papéis vazios quando o papel foi removido; a decisão de acesso fica no middleware", async () => {
-    const authData = await authenticateRequest("Bearer token", lookup({ findRoles: async () => [] }));
+    const authData = await authenticateAuthorization("Bearer token", lookup({ findRoles: async () => [] }));
 
     expect(authData.roles).toEqual([]);
   });

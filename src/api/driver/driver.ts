@@ -1,10 +1,15 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
-import { requireAuthData } from "@/auth/authorization";
 import { AuthRole } from "@/domain/identity/identity.types";
 import { authService } from "@/services/auth.service";
 import { driverService } from "@/services/driver.service";
-import type { DriverMeResponse, DriverRegisterRequest, DriverRegisterResponse } from "@/dto/driver.dto";
+import type {
+  DriverAvailabilityRequest,
+  DriverAvailabilityResponse,
+  DriverMeResponse,
+  DriverRegisterRequest,
+  DriverRegisterResponse,
+} from "@/dto/driver.dto";
 import type { LoginRequest, LoginResponse, LogoutResponse, RefreshRequest, RefreshResponse } from "@/dto/auth.dto";
 
 export const register = api<DriverRegisterRequest, DriverRegisterResponse>(
@@ -33,7 +38,7 @@ export const refresh = api<RefreshRequest, RefreshResponse>(
 export const logout = api<void, LogoutResponse>(
   { expose: true, method: "POST", path: "/driver/logout", auth: true, sensitive: true },
   async () => {
-    const authData = requireAuthData(auth.getAuthData());
+    const authData = auth.getAuthData()!;
     await authService.logout(authData);
     return { message: "Logout realizado com sucesso." };
   },
@@ -42,7 +47,34 @@ export const logout = api<void, LogoutResponse>(
 export const me = api<void, DriverMeResponse>(
   { expose: true, method: "GET", path: "/driver/me", auth: true, sensitive: true, tags: ["driver-role"] },
   async () => {
-    const { userID } = requireAuthData(auth.getAuthData());
+    const { userID } = auth.getAuthData()!;
     return driverService.getMe(userID);
+  },
+);
+
+// Operação de transporte: exige papel DRIVER (driver-role) E aprovação cadastral
+// (driver-operational). Um motorista PENDING/SUSPENDED não entra em operação.
+export const updateAvailability = api<DriverAvailabilityRequest, DriverAvailabilityResponse>(
+  {
+    expose: true,
+    method: "PATCH",
+    path: "/driver/availability",
+    auth: true,
+    sensitive: true,
+    tags: ["driver-role", "driver-operational"],
+  },
+  async payload => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.setAvailability(userID, payload);
+  },
+);
+
+// Consulta do próprio estado operacional: acessível a motoristas sem aprovação
+// (mesma política de /driver/me) para regularização pelo aplicativo.
+export const getAvailability = api<void, DriverAvailabilityResponse>(
+  { expose: true, method: "GET", path: "/driver/availability", auth: true, sensitive: true, tags: ["driver-role"] },
+  async () => {
+    const { userID } = auth.getAuthData()!;
+    return driverService.getAvailability(userID);
   },
 );

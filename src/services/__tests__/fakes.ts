@@ -10,7 +10,9 @@ import type {
   ApplyDriverRoleInput,
   ApplyDriverRoleResult,
   CreateDriverAccountInput,
+  DriverAvailabilityRecord,
   DriverProfileWithUser,
+  SetAvailabilityResult,
 } from "@/repositories/driver/driver.types";
 import type { SessionRepository } from "@/repositories/session/session.repository";
 import type {
@@ -149,12 +151,14 @@ export class FakeUserRepository implements UserRepository {
 
 interface FakeDriverRecord extends DriverProfileWithUser {
   passwordHash: string;
+  available: boolean;
 }
 
 export type { FakeDriverRecord };
 
 export class FakeDriverRepository implements DriverRepository {
   private readonly drivers: FakeDriverRecord[] = [];
+  private readonly activeRideDriverIds = new Set<string>();
   private sequence = 0;
   nextCreateError: Error | null = null;
   nextApplyResult: ApplyDriverRoleResult | null = null;
@@ -166,6 +170,7 @@ export class FakeDriverRepository implements DriverRepository {
     passwordHash?: string;
     status?: DriverStatus;
     accountStatus?: AccountStatus;
+    available?: boolean;
   }): FakeDriverRecord {
     this.sequence += 1;
     const record: FakeDriverRecord = {
@@ -176,6 +181,7 @@ export class FakeDriverRepository implements DriverRepository {
       cpf: "52998224725",
       accountStatus: input.accountStatus ?? AccountStatus.ACTIVE,
       driverStatus: input.status ?? DriverStatus.PENDING,
+      available: input.available ?? false,
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
       passwordHash: input.passwordHash ?? "",
     };
@@ -207,6 +213,7 @@ export class FakeDriverRepository implements DriverRepository {
       cpf: input.cpf,
       accountStatus: AccountStatus.ACTIVE,
       driverStatus: DriverStatus.PENDING,
+      available: false,
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
       passwordHash: input.passwordHash,
     };
@@ -256,6 +263,44 @@ export class FakeDriverRepository implements DriverRepository {
   async findStatusByUserId(userId: string): Promise<DriverStatus | null> {
     const found = this.drivers.find(driver => driver.id === userId);
     return found?.driverStatus ?? null;
+  }
+
+  async findAvailabilityByUserId(userId: string): Promise<DriverAvailabilityRecord | null> {
+    const found = this.drivers.find(driver => driver.id === userId);
+    if (!found) return null;
+
+    return { available: found.available, driverStatus: found.driverStatus, accountStatus: found.accountStatus };
+  }
+
+  async setAvailability(userId: string, available: boolean): Promise<SetAvailabilityResult> {
+    const found = this.drivers.find(driver => driver.id === userId);
+    if (!found) return { status: "profile_not_found" };
+    if (found.driverStatus !== DriverStatus.APPROVED) return { status: "not_approved" };
+
+    // Ativação é bloqueada com corrida ativa; desativação nunca é bloqueada.
+    if (available && this.activeRideDriverIds.has(userId)) {
+      return { status: "active_ride_conflict" };
+    }
+
+    found.available = available;
+    return {
+      status: "updated",
+      availability: {
+        available: found.available,
+        driverStatus: found.driverStatus,
+        accountStatus: found.accountStatus,
+      },
+    };
+  }
+
+  /** Auxiliar de teste: simula corrida ativa (ACCEPTED/IN_PROGRESS) do motorista. */
+  startActiveRide(userId: string): void {
+    this.activeRideDriverIds.add(userId);
+  }
+
+  /** Auxiliar de teste: encerra a corrida ativa simulada (COMPLETED/CANCELLED). */
+  endActiveRide(userId: string): void {
+    this.activeRideDriverIds.delete(userId);
   }
 
   countDrivers(): number {

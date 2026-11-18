@@ -35,3 +35,15 @@ export interface DriverMeResponse {
   accountStatus: AccountStatus;
   driverStatus: DriverStatus;
 }
+
+/** Alteração da disponibilidade operacional do motorista. */
+export interface DriverAvailabilityRequest {
+  available: boolean;
+}
+
+/** Estado operacional do motorista: intenção + aprovação cadastral + conta. */
+export interface DriverAvailabilityResponse {
+  available: boolean;
+  driverStatus: DriverStatus;
+  accountStatus: AccountStatus;
+}

@@ -1,6 +1,7 @@
-import { middleware, type Middleware } from "encore.dev/api";
+import { APIError, middleware, type Middleware } from "encore.dev/api";
 import * as auth from "~encore/auth";
-import { requireAuthData, requireRole } from "@/auth/authorization";
+import { requireRole } from "@/auth/authorization";
+import { ErrorReason } from "@/constants/error-reasons";
 import type { AuthData } from "@/auth/auth.types";
 import { AuthRole } from "@/domain/identity/identity.types";
 
@@ -38,7 +39,14 @@ export function createRoleMiddleware(
   getAuthData: AuthDataGetter = auth.getAuthData,
 ): Middleware {
   return middleware({ target: { auth: true, tags: [policy.tag] } }, async (req, next) => {
-    const authData = requireAuthData(getAuthData());
+    // O target exige auth: true, então o gateway já garantiu o AuthData; o
+    // guard é apenas defesa de tipo/estágio (getter injetável em testes).
+    const authData = getAuthData();
+    if (!authData) {
+      throw APIError.unauthenticated("Autenticação necessária.").withDetails({
+        reason: ErrorReason.AUTHENTICATION_REQUIRED,
+      });
+    }
 
     requireRole(authData, policy.role, policy.deniedMessage);
 

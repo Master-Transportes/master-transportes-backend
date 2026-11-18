@@ -178,3 +178,149 @@ describe("DriverService.getMe", () => {
     expect(error.code).toBe(ErrCode.NotFound);
   });
 });
+
+describe("DriverService.setAvailability", () => {
+  const availabilityRequest = { available: true };
+
+  it("motorista aprovado ativa a disponibilidade", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.APPROVED });
+
+    const response = await service.setAvailability("driver-1", availabilityRequest);
+
+    expect(response).toEqual({
+      available: true,
+      driverStatus: DriverStatus.APPROVED,
+      accountStatus: AccountStatus.ACTIVE,
+    });
+
+    const state = await service.getAvailability("driver-1");
+    expect(state.available).toBe(true);
+  });
+
+  it("motorista aprovado desativa a disponibilidade", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.APPROVED, available: true });
+
+    const response = await service.setAvailability("driver-1", { available: false });
+
+    expect(response.available).toBe(false);
+    expect((await service.getAvailability("driver-1")).available).toBe(false);
+  });
+
+  it("rejeita motorista PENDING com 403 e DRIVER_PROFILE_UNAVAILABLE", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.PENDING });
+
+    const error = await captureApiError(service.setAvailability("driver-1", availabilityRequest));
+
+    expect(error.code).toBe(ErrCode.PermissionDenied);
+    expect(error.details).toEqual({ reason: "DRIVER_PROFILE_UNAVAILABLE" });
+  });
+
+  it("rejeita motorista SUSPENDED mesmo se antes estava aprovado", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.APPROVED, available: true });
+    drivers.setStatus("driver-1", DriverStatus.SUSPENDED);
+
+    const error = await captureApiError(service.setAvailability("driver-1", availabilityRequest));
+
+    expect(error.code).toBe(ErrCode.PermissionDenied);
+    expect(error.details).toEqual({ reason: "DRIVER_PROFILE_UNAVAILABLE" });
+    // O estado persistido não muda por tentativa negada.
+    expect((await service.getAvailability("driver-1")).available).toBe(true);
+  });
+
+  it("retorna 404 quando o perfil não existe", async () => {
+    const { service } = setup();
+
+    const error = await captureApiError(service.setAvailability("motorista-inexistente", availabilityRequest));
+
+    expect(error.code).toBe(ErrCode.NotFound);
+    expect(error.details).toEqual({ reason: "DRIVER_PROFILE_NOT_FOUND" });
+  });
+
+  it("valida entrada: campo desconhecido, tipo errado e campo ausente", async () => {
+    const { service } = setup();
+
+    const unknownField = await captureApiError(
+      service.setAvailability("driver-1", { ...availabilityRequest, status: "APPROVED" } as typeof availabilityRequest),
+    );
+    const wrongType = await captureApiError(
+      service.setAvailability("driver-1", { available: "sim" } as unknown as typeof availabilityRequest),
+    );
+    const missingField = await captureApiError(service.setAvailability("driver-1", {} as typeof availabilityRequest));
+
+    expect(unknownField.code).toBe(ErrCode.InvalidArgument);
+    expect(wrongType.code).toBe(ErrCode.InvalidArgument);
+    expect(missingField.code).toBe(ErrCode.InvalidArgument);
+  });
+
+  it("bloqueia ativação durante corrida ativa com 409 e DRIVER_ALREADY_ON_RIDE", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.APPROVED });
+    drivers.startActiveRide("driver-1");
+
+    const error = await captureApiError(service.setAvailability("driver-1", { available: true }));
+
+    expect(error.code).toBe(ErrCode.AlreadyExists);
+    expect(error.details).toEqual({ reason: "DRIVER_ALREADY_ON_RIDE" });
+    // O estado persistido não muda por tentativa bloqueada.
+    expect((await service.getAvailability("driver-1")).available).toBe(false);
+  });
+
+  it("permite desativação durante corrida ativa (direção segura)", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.APPROVED, available: true });
+    drivers.startActiveRide("driver-1");
+
+    const response = await service.setAvailability("driver-1", { available: false });
+
+    expect(response.available).toBe(false);
+  });
+
+  it("permite ativação após a corrida ativa ser finalizada", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.APPROVED });
+    drivers.startActiveRide("driver-1");
+
+    await captureApiError(service.setAvailability("driver-1", { available: true }));
+    drivers.endActiveRide("driver-1");
+
+    const response = await service.setAvailability("driver-1", { available: true });
+    expect(response.available).toBe(true);
+  });
+
+  it("motorista recém-registrado começa com 'Receber corridas' desativado", async () => {
+    const { service } = setup();
+    const created = await service.register(baseRequest);
+
+    const availability = await service.getAvailability(created.id);
+
+    expect(availability.available).toBe(false);
+  });
+});
+
+describe("DriverService.getAvailability", () => {
+  it("retorna o estado operacional atual", async () => {
+    const { drivers, service } = setup();
+    drivers.seed({ userId: "driver-1", email: "driver@test.com", status: DriverStatus.APPROVED, available: true });
+
+    const response = await service.getAvailability("driver-1");
+
+    expect(response).toEqual({
+      available: true,
+      driverStatus: DriverStatus.APPROVED,
+      accountStatus: AccountStatus.ACTIVE,
+    });
+  });
+
+  it("retorna 404 quando o perfil não existe", async () => {
+    const { service } = setup();
+
+    const error = await captureApiError(service.getAvailability("motorista-inexistente"));
+
+    expect(error.code).toBe(ErrCode.NotFound);
+    expect(error.details).toEqual({ reason: "DRIVER_PROFILE_NOT_FOUND" });
+  });
+});

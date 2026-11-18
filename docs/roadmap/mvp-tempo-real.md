@@ -92,6 +92,59 @@ corrida ativa conflitante. **Não confiar apenas no fato de existir uma conexão
 **Entregável:** motorista aprovado entra e sai de operação, com testes de autorização, suspensão e
 indisponibilidade.
 
+### Regras do controle "Receber corridas" (decisão de produto)
+
+Comportamento igual ao botão **"Receber corridas"** dos aplicativos de transporte. **Estar
+conectado ao stream NÃO significa estar disponível para receber corridas** — são estados
+independentes:
+
+1. O motorista inicia com "Receber corridas" **desativado** (`available = false` é o default do
+   banco); login ou conexão ao `/driver/stream` nunca ativam a disponibilidade.
+2. Ao ativar, o backend registra a **intenção explícita** de receber ofertas no PostgreSQL
+   (`PATCH /driver/availability`).
+3. Elegibilidade para receber ofertas = conta ativa **E** papel `DRIVER` **E** perfil `APPROVED`
+   **E** disponibilidade ativada **E** localização/presença recentes (Etapa 3, Redis) **E**
+   nenhuma corrida ativa incompatível. Falta qualquer uma → inelegível, sem exceções.
+4. Ao desativar, para de receber novas ofertas **imediatamente** (a próxima decisão de despacho
+   consulta o estado real no PostgreSQL).
+5. Ao aceitar validamente uma corrida, a disponibilidade é desativada **na mesma transação do
+   aceite** (contrato para a futura transação de aceite, abaixo).
+6. Ao finalizar ou cancelar a corrida, a disponibilidade **não é reativada automaticamente**. O
+   motorista precisa pressionar "Receber corridas" novamente.
+7. Recusar uma oferta ou deixá-la expirar **não** desativa a disponibilidade.
+8. Desconectar o stream **não** altera a preferência salva, mas torna o motorista inelegível
+   enquanto estiver desconectado ou sem presença recente.
+9. Ao reconectar, nunca considerar o motorista elegível apenas porque o stream abriu: reavaliar
+   preferência explícita, aprovação, corrida ativa e presença antes de qualquer entrega.
+
+Aplicado agora no backend:
+
+- Ativar disponibilidade com corrida ativa (`rides.status IN ('ACCEPTED','IN_PROGRESS')`) retorna
+  **409** com razão estável `DRIVER_ALREADY_ON_RIDE` — verificação na **mesma transação** do lock
+  do perfil (`FOR UPDATE`), imune a concorrência e a múltiplas instâncias (o PostgreSQL é a
+  autoridade; desativar nunca é bloqueado).
+- O stream **não lê nem altera** a disponibilidade: autenticação de stream e disponibilidade
+  operacional são camadas independentes. O stream continua útil durante a viagem (localização,
+  atualizações da corrida aceita) mesmo com "Receber corridas" desativado.
+
+**Contrato para a futura transação de aceite (Etapa 5):** a transação que confirma solicitação +
+oferta vencedora + criação da `ride` DEVE, no mesmo commit, gravar
+`driver_profiles.available = false` para o motorista vencedor. Assim "aceitou" e "parou de receber
+ofertas" são um único fato atômico — sem janela em que o motorista com corrida ativa possa receber
+nova oferta. A seleção de candidatos (Etapa 6) deve filtrar por `available = true` **e** corrida
+inexistente; a entrega de ofertas deve revalidar essas condições na hora (ver Etapa 2,
+`isEligible()` + `isHeartbeatFresh()`).
+
+> **Status (2026-11-17):** endpoints `PATCH /driver/availability` (tags
+> `driver-role` + `driver-operational`) e `GET /driver/availability` (tag `driver-role`)
+> **implementados com as regras acima**: coluna `available` em `driver_profiles` (migration
+> `0004`, default `false`), verificação de aprovação e de corrida ativa dentro da transação de
+> gravação (409 `DRIVER_ALREADY_ON_RIDE`), política central atualizada, testes de service
+> (ativação, desativação, corrida ativa, recém-registrado inicia desativado) e integração
+> (corrida ativa bloqueia/libera, toggles concorrentes serializados por `FOR UPDATE`). Pendente
+> nesta entrega: contratos do stream do motorista (Etapa 2); presença/localização recente entra
+> na Etapa 3.
+
 ## Etapa 2 — Streaming bidirecional do motorista
 
 Primeira implementação de tempo real, não algo para o final.
@@ -138,6 +191,46 @@ Quando essa mensagem chegar, o aplicativo apresenta a oferta imediatamente.
 **Entregável:** motorista conecta, envia localização, recebe uma mensagem de teste do servidor e
 reconecta corretamente após uma queda.
 
+> **Status (2026-11-17):** **implementado e verificado em runtime** (`/driver/stream` via
+> `api.streamInOut`, tags `driver-role` + `driver-operational`): handshake autenticado com JWT,
+> `stream.connected` do servidor, localização/heartbeat validados, fail fast em violação semântica
+> e reconexão. Detalhes verificados contra o Encore 1.58.4:
+> - o runtime descarta silenciosamente mensagens com `type` fora do schema de fio e remove campos
+>   extras; violações semânticas (coordenada, `sampledAt`, precisão) fecham a conexão via Zod;
+> - motoristas inelegíveis (PENDING/SUSPENDED) completam o handshake HTTP mas não recebem nenhuma
+>   mensagem (middleware operacional bloqueia o handler): o cliente deve tratar a ausência de
+>   `stream.connected` como recusa;
+> - revalidação **orientada às mensagens** (`heartbeat`/`location.updated`) com **janela mínima de
+>   30 s** (`DRIVER_STREAM_MIN_REVALIDATION_INTERVAL_MS`), sem timer independente e sem consulta em
+>   conexão ociosa: a verificação sequencial (sessão ativa → conta ativa → papel DRIVER → perfil
+>   APPROVED, falha fechada) ocorre na primeira mensagem após a janela. Motivo: 4 consultas por
+>   amostra de GPS (a cada 3 s) inviabilizam o banco; **decisão permanente: NÃO usaremos timer
+>   independente nem verificação a cada mensagem** — janela por mensagem + revalidação na hora de
+>   cada entrega sensível (`isEligible()`). Antes de qualquer oferta, a camada de entrega executa
+>   uma verificação ATUAL da autorização operacional;
+> - **Connection Registry em memória** (`DriverConnectionRegistry`): `add`/`get`/`remove`
+>   (comparação por identidade do stream; `add` mantém a conexão mais recente por usuário sem
+>   fechar a anterior; o registro é removido quando o loop `for await` termina). Serve apenas para
+>   localizar a conexão — nenhum status derivado é armazenado; Map é local à instância (Etapa 8
+>   trata distribuição);
+> - **Stream ≠ disponibilidade**: o stream não lê nem altera "Receber corridas". Motorista
+>   conectado com o recebimento desativado continua enviando heartbeat/GPS e mantendo a corrida
+>   aceita; a seleção de candidatos e a entrega de ofertas é que exigirão disponibilidade +
+>   aprovação + presença/localização recentes + ausência de corrida ativa;
+> - **Política de presença (contrato para a entrega):** presença = última atividade válida medida
+>   com **horário do servidor**, com expiração — o telefone não prolonga presença com `sampledAt`
+>   arbitrário. `isHeartbeatFresh()` (60 s) é contrato, ainda **não implementado** na entrega;
+>   será obrigatório na camada real antes da primeira oferta. Conexão aberta sem atividade
+>   recente não recebe ofertas;
+> - **Ordenação de GPS:** autoridade é o **script Lua no Redis** (atômico): amostra antiga/
+>   duplicada é ignorada lá, com validação de `sampledAt` futuro (`TIME` do Redis + tolerância
+>   única de 10 s compartilhada com o Zod). A ordenação in-memory do stream foi removida;
+> - o auditor de política central (`endpoint-policy.spec.ts`) foi estendido para reconhecer
+>   declarações de stream (sem `method` HTTP).
+>
+> Artefato de prova: `scripts/smoke-driver-stream.ts`. Pendente nesta etapa (Etapa 3): gravação da
+> posição no Redis GEO.
+
 ## Etapa 3 — Atualização de localização com Redis GEO
 
 Conectar o stream ao Redis. A localização recente não precisa gerar um UPDATE no PostgreSQL a cada
@@ -156,6 +249,26 @@ testes reais):
 
 Retirar posições antigas do índice GEO: somente TTL em chaves individuais **não** limpa
 automaticamente os membros de um índice geográfico compartilhado.
+
+Regras da integração Redis GEO (decididas na revisão do stream):
+
+- **Horário:** a presença e a expiração usam o **horário do servidor** (instante de recebimento da
+  mensagem válida) — o `sampledAt` do telefone é referência da amostra, nunca prova de presença.
+- **Ordenação/anti-sobrescrita:** aceitar coordenadas apenas se a amostra for mais recente que a
+  última posição válida do motorista (o stream já ignora amostras fora de ordem; o Redis deve
+  manter a mesma regra com o horário do servidor como autoridade).
+- **Precisão para matching:** o limite de `accuracyMeters ≤ 100 km` é sanidade de transporte, NÃO
+  posição válida para escolher motorista próximo — o matching deverá exigir precisão útil
+  (parâmetro a calibrar) além da proximidade geográfica.
+- **Presença vencida ⇒ inelegível:** sem atividade válida recente, o motorista sai do matching e
+  nenhuma oferta nova é enviada (alinhado com `isHeartbeatFresh()` na entrega).
+
+> **Status (2026-11-18):** **implementado** — `DriverPresenceService` (Redis, scripts Lua
+> atômicos) integrado ao `DriverStreamService`; presença (TTL 60 s, relógio do Redis), localização
+> com duplo frescor (`sampledAt` **e** `receivedAt` ≤ 45 s), precisão ≤ 200 m para elegibilidade
+> de matching, `connectionId` gerado pelo servidor com propriedade atômica do estado, limpeza
+> oportunista condicional de membros GEO e `findNearbyDrivers()` funcional. Relatório completo:
+> `docs/roadmap/etapa3-redis-geo.md`.
 
 **Entregável:** dois motoristas de teste enviam coordenadas, o Redis mantém as posições e um
 motorista com localização antiga deixa de ser selecionado.

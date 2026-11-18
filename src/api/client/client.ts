@@ -1,6 +1,5 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
-import { requireAuthData } from "@/auth/authorization";
 import { AuthRole } from "@/domain/identity/identity.types";
 import { authService } from "@/services/auth.service";
 import { clientService } from "@/services/client.service";
@@ -31,7 +30,7 @@ export const refresh = api<RefreshRequest, RefreshResponse>(
 export const logout = api<void, LogoutResponse>(
   { expose: true, method: "POST", path: "/client/logout", auth: true, sensitive: true },
   async () => {
-    const authData = requireAuthData(auth.getAuthData());
+    const authData = auth.getAuthData()!;
     await authService.logout(authData);
     return { message: "Logout realizado com sucesso." };
   },
@@ -40,7 +39,7 @@ export const logout = api<void, LogoutResponse>(
 export const me = api<void, ClientMeResponse>(
   { expose: true, method: "GET", path: "/client/me", auth: true, sensitive: true, tags: ["client-role"] },
   async () => {
-    const { userID } = requireAuthData(auth.getAuthData());
+    const { userID } = auth.getAuthData()!;
     return clientService.getMe(userID);
   },
 );

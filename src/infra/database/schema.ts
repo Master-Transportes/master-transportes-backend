@@ -8,6 +8,7 @@ import {
   date,
   timestamp,
   numeric,
+  boolean,
   index,
   uniqueIndex,
   primaryKey,
@@ -137,6 +138,10 @@ export const driverProfiles = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     status: driverStatusEnum("status").notNull().default(DriverStatus.PENDING),
+    // Disponibilidade operacional (intenção de receber solicitações), distinta
+    // da aprovação cadastral. Elegibilidade final exige presença recente e
+    // ausência de corrida ativa, verificadas no despacho (Etapa 3 do MVP).
+    available: boolean("available").notNull().default(false),
     reviewedAt: timestamptz("reviewed_at"),
     reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
     rejectionReason: text("rejection_reason"),

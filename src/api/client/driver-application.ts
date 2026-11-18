@@ -1,6 +1,5 @@
 import { api } from "encore.dev/api";
 import * as auth from "~encore/auth";
-import { requireAuthData } from "@/auth/authorization";
 import { driverService } from "@/services/driver.service";
 import type { DriverApplyRequest, DriverMeResponse } from "@/dto/driver.dto";
 
@@ -13,7 +12,7 @@ import type { DriverApplyRequest, DriverMeResponse } from "@/dto/driver.dto";
 export const applyDriver = api<DriverApplyRequest, DriverMeResponse>(
   { expose: true, method: "POST", path: "/driver/apply", auth: true, sensitive: true, tags: ["client-role"] },
   async payload => {
-    const { userID } = requireAuthData(auth.getAuthData());
+    const { userID } = auth.getAuthData()!;
     return driverService.apply(userID, payload);
   },
 );

@@ -20,3 +20,12 @@ export const DriverRegisterSchema = z.strictObject({
  * status de aprovação e e-mail nunca vêm do payload.
  */
 export const DriverApplySchema = z.strictObject({ phone: phoneSchema, cpf: cpfSchema });
+
+/**
+ * Disponibilidade operacional. O payload só declara a intenção do motorista:
+ * aprovação cadastral, corrida ativa e presença recente são verificadas no
+ * backend e nunca são aceitas daqui.
+ */
+export const DriverAvailabilitySchema = z.strictObject({
+  available: z.boolean("Disponibilidade deve ser um valor booleano."),
+});

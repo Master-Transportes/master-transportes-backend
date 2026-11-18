@@ -1,10 +1,4 @@
-import type { Header } from "encore.dev/api";
 import type { AuthRole } from "@/domain/identity/identity.types";
-
-/** Parâmetros recebidos pelo AuthHandler do Encore. */
-export interface AuthParams {
-  authorization?: Header<"Authorization">;
-}
 
 /**
  * Dados de autenticação expostos pelo AuthHandler (`~encore/auth`).

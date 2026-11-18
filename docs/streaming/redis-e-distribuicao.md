@@ -105,6 +105,7 @@ O Redis Pub/Sub tradicional é **efêmero**: se uma réplica estiver desconectad
 da publicação, **não receberá** aquele evento depois. Por isso a **persistência no
 PostgreSQL continua indispensável**.
 
-> Nota para este projeto: `ioredis` já está instalado (`src/infra/cache`), mas **sem
-> consumidores**. Ativar distribuição via Redis aqui exige decisão arquitetural própria
-> (ver `AGENTS.md` — pendências conhecidas).
+> Nota para este projeto: `ioredis` já está instalado (`src/infra/cache`) e desde a **Etapa 3**
+> possui seu primeiro consumidor real: `DriverPresenceService` (presença + Redis GEO do motorista).
+> Ativar **distribuição de eventos entre réplicas** via Redis Pub/Sub continua sendo uma decisão
+> arquitetural própria (Etapa 8 do MVP — ver `AGENTS.md` — pendências conhecidas).

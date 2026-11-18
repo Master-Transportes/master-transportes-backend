@@ -29,6 +29,13 @@
       "when": 1794943924397,
       "tag": "0003_ride_requests_separation",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794947239272,
+      "tag": "0004_driver_availability",
+      "breakpoints": true
     }
   ]
 }

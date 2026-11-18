@@ -70,6 +70,13 @@ export function createRedisClient(): Redis {
 
 export const redis = createRedisClient();
 
+// Conexão proativa no boot do processo: com lazyConnect, o primeiro comando
+// após o start falharia ("Stream isn't writeable", offline queue desativada)
+// até o handshake terminar. Iniciar aqui elimina essa janela de corrida para
+// praticamente toda conexão de motorista. Falha no boot é tolerada — o
+// cliente reconecta por conta própria e os logs já registram indisponibilidade.
+void redis.connect().catch(() => undefined);
+
 export async function pingRedis(): Promise<boolean> {
   try {
     await redis.ping();

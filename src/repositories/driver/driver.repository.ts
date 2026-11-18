@@ -2,12 +2,14 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { AccountStatus, AuthRole } from "@/domain/identity/identity.types";
 import { DriverStatus } from "@/domain/driver/driver.types";
 import { db } from "@/infra/database/drizzle";
-import { driverProfiles, userRoles, users } from "@/infra/database/schema";
+import { driverProfiles, rides, userRoles, users } from "@/infra/database/schema";
 import type {
   ApplyDriverRoleInput,
   ApplyDriverRoleResult,
   CreateDriverAccountInput,
+  DriverAvailabilityRecord,
   DriverProfileWithUser,
+  SetAvailabilityResult,
 } from "./driver.types";
 
 export interface DriverRepository {
@@ -20,6 +22,12 @@ export interface DriverRepository {
   applyDriverRole(input: ApplyDriverRoleInput): Promise<ApplyDriverRoleResult>;
   findProfileByUserId(userId: string): Promise<DriverProfileWithUser | null>;
   findStatusByUserId(userId: string): Promise<DriverStatus | null>;
+  findAvailabilityByUserId(userId: string): Promise<DriverAvailabilityRecord | null>;
+  /**
+   * Ativa/desativa a disponibilidade operacional de forma atômica: bloqueia a
+   * linha do perfil, exige perfil vivo e status APPROVED antes de gravar.
+   */
+  setAvailability(userId: string, available: boolean): Promise<SetAvailabilityResult>;
 }
 
 export class DrizzleDriverRepository implements DriverRepository {
@@ -190,6 +198,63 @@ export class DrizzleDriverRepository implements DriverRepository {
       .limit(1);
 
     return row?.status ?? null;
+  }
+
+  async findAvailabilityByUserId(userId: string): Promise<DriverAvailabilityRecord | null> {
+    const [row] = await db
+      .select({ available: driverProfiles.available, driverStatus: driverProfiles.status, accountStatus: users.status })
+      .from(driverProfiles)
+      .innerJoin(users, eq(users.id, driverProfiles.userId))
+      .where(and(eq(driverProfiles.userId, userId), isNull(driverProfiles.deletedAt), isNull(users.deletedAt)))
+      .limit(1);
+
+    return row ?? null;
+  }
+
+  /**
+   * Ativa/desativa a disponibilidade operacional de forma atômica: bloqueia a
+   * linha do perfil, exige perfil vivo e status APPROVED antes de gravar.
+   * Ativar com corrida ativa (ACCEPTED/IN_PROGRESS) é bloqueado na mesma
+   * transação — o aceite válido deve desativar a disponibilidade (contrato
+   * documentado em docs/roadmap/mvp-tempo-real.md); este bloqueio é a segunda
+   * barreira caso o aceite não tenha feito.
+   */
+  async setAvailability(userId: string, available: boolean): Promise<SetAvailabilityResult> {
+    return db.transaction(async tx => {
+      // FOR UPDATE serializa mudanças concorrentes de estado do mesmo motorista
+      // (ex.: aprovação sendo gravada por um operador ao mesmo tempo).
+      const [profile] = await tx
+        .select({ driverStatus: driverProfiles.status, accountStatus: users.status })
+        .from(driverProfiles)
+        .innerJoin(users, eq(users.id, driverProfiles.userId))
+        .where(and(eq(driverProfiles.userId, userId), isNull(driverProfiles.deletedAt), isNull(users.deletedAt)))
+        .for("update");
+
+      if (!profile) return { status: "profile_not_found" as const };
+      if (profile.driverStatus !== DriverStatus.APPROVED) return { status: "not_approved" as const };
+
+      if (available) {
+        // Mesma transação do lock do perfil: sem janela entre verificação e
+        // gravação. Desativar nunca é bloqueado (direção segura).
+        const [activeRide] = await tx
+          .select({ id: rides.id })
+          .from(rides)
+          .where(and(eq(rides.driverId, userId), sql`${rides.status} IN ('ACCEPTED', 'IN_PROGRESS')`))
+          .limit(1);
+
+        if (activeRide) return { status: "active_ride_conflict" as const };
+      }
+
+      await tx
+        .update(driverProfiles)
+        .set({ available, updatedAt: sql`now()` })
+        .where(eq(driverProfiles.userId, userId));
+
+      return {
+        status: "updated" as const,
+        availability: { available, driverStatus: profile.driverStatus, accountStatus: profile.accountStatus },
+      };
+    });
   }
 }
 

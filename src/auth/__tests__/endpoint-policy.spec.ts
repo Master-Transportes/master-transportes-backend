@@ -6,22 +6,23 @@ import type { Middleware } from "encore.dev/api";
 import { ENDPOINT_POLICIES, type EndpointPolicy } from "@/auth/endpoint-policy";
 
 /**
- * Auditoria dos endpoints declarados com `api(...)`.
+ * Auditoria dos endpoints declarados com `api(...)` e `api.stream*(...)`.
  *
  * Além da correspondência com a política central, o teste confirma que o
  * middleware de papel está REALMENTE registrado no `new Service()` do serviço.
  * Uma tag no endpoint sem middleware correspondente não protege nada.
  *
  * O parser é deliberadamente simples e baseado na convenção do Prettier. Se um
- * novo formato de endpoint (`api.raw`, `api.stream*`) aparecer, o teste falha
- * explicitamente em vez de ignorar a rota.
+ * novo formato de endpoint (`api.raw` ou outra variante de stream) aparecer,
+ * o teste falha explicitamente em vez de ignorar a rota.
  */
 interface ScannedEndpoint {
   key: string;
   service: string;
   name: string;
   path: string;
-  method: string;
+  /** Nulo em endpoints de stream (StreamOptions não declara método HTTP). */
+  method: string | null;
   expose: boolean;
   auth: boolean;
   tags: string[];
@@ -34,7 +35,8 @@ interface ServiceDefinition {
 
 const ROLE_TAGS = { client: "client-role", driver: "driver-role" } as const;
 const API_DIR = join(import.meta.dir, "..", "..", "api");
-const ENDPOINT_PATTERN = /export const (\w+)\s*=\s*api<[^>]*>\(\s*\{([\s\S]*?)\}\s*,/g;
+const ENDPOINT_PATTERN =
+  /export const (\w+)\s*=\s*api(?:\.(streamIn|streamOut|streamInOut))?<[^>]*>\(\s*\{([\s\S]*?)\}\s*,/g;
 const ANY_API_DECLARATION = /export const (\w+)\s*=\s*api/g;
 
 function walk(directory: string): string[] {
@@ -56,7 +58,7 @@ function scanService(service: string): ScannedEndpoint[] {
     const parsedNames = new Set<string>();
 
     for (const match of source.matchAll(ENDPOINT_PATTERN)) {
-      const [, name, options] = match;
+      const [, name, streamForm, options] = match;
       parsedNames.add(name);
 
       const authMatch = /auth:\s*(true|false)/.exec(options);
@@ -64,8 +66,14 @@ function scanService(service: string): ScannedEndpoint[] {
       const method = /method:\s*"([^"]+)"/.exec(options)?.[1];
       const expose = /expose:\s*(true|false)/.exec(options)?.[1];
 
-      if (!path || !method || expose === undefined || !authMatch) {
-        throw new Error(`Endpoint ${service}.${name} não declara explicitamente method/path/expose/auth em ${file}.`);
+      if (!path || expose === undefined || !authMatch) {
+        throw new Error(`Endpoint ${service}.${name} não declara explicitamente path/expose/auth em ${file}.`);
+      }
+
+      // StreamOptions não tem método HTTP (handshake WebSocket); endpoints
+      // `api()` comuns exigem method explícito.
+      if (!streamForm && !method) {
+        throw new Error(`Endpoint ${service}.${name} não declara explicitamente method em ${file}.`);
       }
 
       const tagsBlock = /tags:\s*\[([^\]]*)\]/.exec(options)?.[1] ?? "";
@@ -76,7 +84,7 @@ function scanService(service: string): ScannedEndpoint[] {
         service,
         name,
         path,
-        method,
+        method: method ?? null,
         expose: expose === "true",
         auth: authMatch[1] === "true",
         tags,
@@ -128,7 +136,8 @@ describe("Política de acesso dos endpoints", () => {
   it("declara explicitamente método, rota, expose e auth", () => {
     for (const endpoint of endpoints) {
       expect(endpoint.path.startsWith("/")).toBe(true);
-      expect(endpoint.method).toBe(endpoint.method.toUpperCase());
+      // Streams não têm método HTTP (handshake WebSocket).
+      expect(endpoint.method === null || endpoint.method === endpoint.method.toUpperCase()).toBe(true);
       expect(typeof endpoint.expose).toBe("boolean");
     }
   });

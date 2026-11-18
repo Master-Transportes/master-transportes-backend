@@ -22,4 +22,7 @@ export const ENDPOINT_POLICIES = {
   "driver.refresh": "public",
   "driver.logout": "authenticated",
   "driver.me": "driver",
+  "driver.updateAvailability": "driver",
+  "driver.getAvailability": "driver",
+  "driver.stream": "driver",
 } as const satisfies Record<string, EndpointPolicy>;
