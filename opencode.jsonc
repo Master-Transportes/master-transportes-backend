@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // MCP local do Encore (stdio), formato V2 (mcp.servers).
+  // O app ID local (u5e8c) é o impresso por `encore mcp start` nesta instalação
+  // self-hosted; o app não está vinculado à plataforma Encore.
+  //
+  // IMPEDIMENTO ATUAL: `encore mcp run` conecta-se a http://localhost:9900 e a
+  // resolução de "localhost" falha por DNS neste ambiente (entradas comentadas no
+  // hosts). Corrigido o hosts (127.0.0.1 localhost), remova "disabled" abaixo.
+  "mcp": {
+    "servers": {
+      "encore-local": {
+        "type": "local",
+        "command": ["encore", "mcp", "run", "--app=u5e8c"],
+        "disabled": true
+      }
+    }
+  }
+}

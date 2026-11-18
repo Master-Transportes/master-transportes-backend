@@ -143,6 +143,19 @@ Resumo das regras transversais:
 - Crie `AGENTS.md` mais específicos em subdiretórios apenas quando houver regras locais
   realmente distintas; não duplique estas instruções.
 
+## Agente `master-transporte` e skills
+
+- O projeto possui o agente especializado `.opencode/agents/master-transporte.md`
+  (selecione-o no OpenCode para tarefas de engenharia deste backend).
+- Referências oficiais por assunto estão catalogadas em `docs/references.md`;
+  consulte sob demanda (`webfetch` na página pertinente), não em lote.
+- Skills por tecnologia em `.opencode/skills/` devem ser carregadas conforme o assunto
+  (`encore-runtime`, `encore-events`, `drizzle-postgres`, `redis-realtime`,
+  `typescript-quality`) — não todas em cada tarefa.
+- Consulte a documentação oficial quando houver dúvida técnica, mudança de versão
+  ou comportamento específico de bibliotecas, confirmando a versão instalada.
+- O código existente, os contratos reais e os testes têm prioridade sobre exemplos genéricos.
+
 ## Entrega
 
 Ao concluir, informe de forma objetiva: comportamento alterado, arquivos relevantes,
