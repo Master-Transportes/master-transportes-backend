@@ -17,6 +17,10 @@
 
     /* Strict Type-Checking Options */
     "strict": true,
+    /* Toda função deve retornar em todos os caminhos e switches de uniões
+       precisam ser exaustivos — sem retorno implícito `undefined`. */
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
 
     /* Module Resolution Options */
     "moduleResolution": "bundler",

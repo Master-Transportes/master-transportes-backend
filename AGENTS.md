@@ -111,6 +111,8 @@ Resumo das regras transversais:
 
 ## Streaming e eventos (quando a tarefa envolver esses recursos)
 
+- A skill global `encore-events` formaliza garantias e armadilhas de Pub/Sub
+  e Streaming; este AGENTS.md, `docs/` e o código real prevalecem sobre ela.
 - Consulte a documentação pertinente em `docs/streaming/`, se presente, e valide os
   exemplos contra a implementação e a versão atual do Encore.
 - Diferencie conexão WebSocket, entrega em tempo real, persistência, cache/presença e
@@ -143,15 +145,23 @@ Resumo das regras transversais:
 - Crie `AGENTS.md` mais específicos em subdiretórios apenas quando houver regras locais
   realmente distintas; não duplique estas instruções.
 
-## Agente `master-transporte` e skills
+## Agentes, skills e referências
 
-- O projeto possui o agente especializado `.opencode/agents/master-transporte.md`
-  (selecione-o no OpenCode para tarefas de engenharia deste backend).
+- O setup global do OpenCode fornece o agente especializado **`backend-engineer`**
+  (selecione-o no OpenCode para tarefas de engenharia deste backend) e as skills
+  `encore-ts`, `drizzle`, `postgresql`, `backend-quality` e
+  `clean-code-typescript`. Carregue a skill conforme o assunto da tarefa — não
+  todas em cada tarefa. **Este AGENTS.md prevalece sobre qualquer skill.**
+- O MCP global `context7` fornece documentação viva das bibliotecas
+  (`/websites/encore_dev_ts`, `/drizzle-team/drizzle-orm-docs`,
+  `/websites/postgresql`, `/labs42io/clean-code-typescript`): consulte apenas com
+  dúvida técnica concreta, comparando com a versão instalada.
 - Referências oficiais por assunto estão catalogadas em `docs/references.md`;
   consulte sob demanda (`webfetch` na página pertinente), não em lote.
-- Skills por tecnologia em `.opencode/skills/` devem ser carregadas conforme o assunto
-  (`encore-runtime`, `encore-events`, `drizzle-postgres`, `redis-realtime`,
-  `typescript-quality`) — não todas em cada tarefa.
+- Assuntos específicos deste projeto (streaming, eventos, Redis em tempo real)
+  ficam cobertos por `docs/`, por este AGENTS.md e pelo código real; crie skills
+  locais em `.opencode/skills/` apenas quando um padrão duradouro merecer
+  catalogação — não antecipe.
 - Consulte a documentação oficial quando houver dúvida técnica, mudança de versão
   ou comportamento específico de bibliotecas, confirmando a versão instalada.
 - O código existente, os contratos reais e os testes têm prioridade sobre exemplos genéricos.

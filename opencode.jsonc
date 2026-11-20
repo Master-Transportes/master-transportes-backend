@@ -9,11 +9,7 @@
   // hosts). Corrigido o hosts (127.0.0.1 localhost), remova "disabled" abaixo.
   "mcp": {
     "servers": {
-      "encore-local": {
-        "type": "local",
-        "command": ["encore", "mcp", "run", "--app=u5e8c"],
-        "disabled": true
-      }
-    }
-  }
+      "encore-local": { "type": "local", "command": ["encore", "mcp", "run", "--app=u5e8c"], "disabled": false },
+    },
+  },
 }
